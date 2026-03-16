@@ -4,7 +4,9 @@ import '../../data/models/state.dart' as location_models;
 import '../../data/models/district.dart';
 import '../../data/models/mandal.dart';
 import '../../data/models/user.dart';
+import '../../data/models/user_comment.dart';
 import '../../data/repositories/auth_repository.dart';
+import '../../data/repositories/comments_repository.dart';
 import '../../features/auth/auth_view_model.dart';
 
 class AdminUserManagementController extends ChangeNotifier {
@@ -24,6 +26,12 @@ class AdminUserManagementController extends ChangeNotifier {
   bool _isLoadingUsers = false;
   String? _usersError;
 
+  /// User comments state
+  final CommentsRepository _commentsRepository = CommentsRepositoryImpl();
+  List<UserCommentEntry> _userComments = [];
+  bool _isLoadingComments = false;
+  String? _commentsError;
+
   /// Getters
   int? get selectedRoleId => _selectedRoleId;
   location_models.State? get selectedState => _selectedState;
@@ -32,6 +40,25 @@ class AdminUserManagementController extends ChangeNotifier {
   List<User> get users => _users;
   bool get isLoadingUsers => _isLoadingUsers;
   String? get usersError => _usersError;
+  List<UserCommentEntry> get userComments => _userComments;
+  bool get isLoadingComments => _isLoadingComments;
+  String? get commentsError => _commentsError;
+
+  Future<void> fetchUserComments(int userId) async {
+    _isLoadingComments = true;
+    _commentsError = null;
+    _userComments = [];
+    notifyListeners();
+
+    try {
+      _userComments = await _commentsRepository.getUserComments(userId: userId);
+    } catch (e) {
+      _commentsError = e.toString();
+    } finally {
+      _isLoadingComments = false;
+      notifyListeners();
+    }
+  }
 
   Future<void> fetchUsers({
     required AuthRepository authRepository,

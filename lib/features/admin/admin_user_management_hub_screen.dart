@@ -7,6 +7,7 @@ import '../../data/models/user.dart';
 import '../../providers/app_providers.dart';
 import '../../shared/widgets/auto_scaled_text.dart';
 import 'admin_user_management_screen.dart';
+import 'user_comments_screen.dart';
 
 class AdminUserManagementHubScreen extends ConsumerStatefulWidget {
   const AdminUserManagementHubScreen({super.key});
@@ -209,6 +210,12 @@ class _UsersTab extends StatelessWidget {
                         : null;
 
                     return ListTile(
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => UserCommentsScreen(user: user),
+                        ),
+                      ),
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 16,
                         vertical: 6,

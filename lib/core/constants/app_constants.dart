@@ -16,6 +16,7 @@ class AppConstants {
   static const String news = '/news';
   static const String newsStatus = '/news-status';
   static const String comments = '/comments';
+  static const String commentUsers = '/comment-users';
   static const String likeDislike = '/likeDislike';
   static const String commentsReply = '/comments/reply';
 

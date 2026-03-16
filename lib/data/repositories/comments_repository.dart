@@ -1,4 +1,5 @@
 import '../models/comment.dart';
+import '../models/user_comment.dart';
 import '../../core/services/api_service.dart';
 import '../../core/constants/app_constants.dart';
 import '../models/likeable_type.dart';
@@ -16,6 +17,7 @@ abstract class CommentsRepository {
     required LikeableType likeableType,
     required bool isLike,
   });
+  Future<List<UserCommentEntry>> getUserComments({required int userId});
 }
 
 class CommentsRepositoryImpl implements CommentsRepository {
@@ -135,6 +137,24 @@ class CommentsRepositoryImpl implements CommentsRepository {
       return [];
     } catch (e) {
       throw Exception('Failed to fetch comments: $e');
+    }
+  }
+
+  @override
+  Future<List<UserCommentEntry>> getUserComments({required int userId}) async {
+    try {
+      final response = await _apiService.get(
+        AppConstants.commentUsers,
+        queryParameters: {'user_id': userId.toString()},
+        useAuth: true,
+      );
+
+      final data = response['data'] as List<dynamic>? ?? [];
+      return data
+          .map((e) => UserCommentEntry.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      throw Exception('Failed to fetch user comments: $e');
     }
   }
 
