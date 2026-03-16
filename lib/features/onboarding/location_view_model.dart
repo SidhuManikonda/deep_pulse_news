@@ -1,6 +1,6 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import 'package:flutter/foundation.dart';
 import '../../data/models/district.dart';
 import '../../data/models/mandal.dart';
 import '../../data/models/state.dart' as location_models;

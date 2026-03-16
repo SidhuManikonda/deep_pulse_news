@@ -13,29 +13,32 @@ extension UserRoleExtension on User {
     if (hasRoleSlug('admin')) {
       return UserRole.admin;
     }
-    
+
     // Check for sub-admin role
     if (hasRoleSlug('sub_admin') || hasRoleSlug('sub-admin')) {
       return UserRole.subAdmin;
     }
-    
+
     // Check for editor role
     if (hasRoleSlug('editor')) {
       return UserRole.editor;
     }
-    
+
     // Check for reporter role
     if (hasRoleSlug('reporter')) {
       return UserRole.reporter;
     }
-    
+
     // Default to reader
     return UserRole.reader;
   }
 
   /// Check if user has a specific role slug
   bool hasRoleSlug(String slug) {
-    return roles?.any((role) => role.slug.toLowerCase() == slug.toLowerCase()) ?? false;
+    return roles?.any(
+          (role) => role.slug.toLowerCase() == slug.toLowerCase(),
+        ) ??
+        false;
   }
 
   /// Check if user has permission for a specific action
@@ -43,23 +46,27 @@ extension UserRoleExtension on User {
     if (roles == null || roles!.isEmpty) {
       return false;
     }
-    
+
     for (final role in roles!) {
       if (role.permissions?.any((p) => p.slug == permission) ?? false) {
         return true;
       }
     }
-    
+
     return false;
   }
 
   // Dynamic API-based permission methods using actual API permissions
-  
+
   /// Can upload news content - uses API permissions
-  bool get canUploadContent => hasPermission(Permissions.createNews) || hasPermission(Permissions.uploadMedia);
+  bool get canUploadContent =>
+      hasPermission(Permissions.createNews) ||
+      hasPermission(Permissions.uploadMedia);
 
   /// Can moderate/approve content - uses API permissions
-  bool get canModerateContent => hasPermission(Permissions.editNews) || hasPermission(Permissions.publishNews);
+  bool get canModerateContent =>
+      hasPermission(Permissions.editNews) ||
+      hasPermission(Permissions.publishNews);
 
   /// Can manage users and profiles - uses API permissions
   bool get canManageUsers => hasPermission(Permissions.manageUsers);
@@ -71,13 +78,17 @@ extension UserRoleExtension on User {
   bool get canManageLocations => hasPermission(Permissions.manageSettings);
 
   /// Can access admin panel - uses API permissions
-  bool get canAccessAdmin => hasPermission(Permissions.manageUsers) || hasPermission(Permissions.manageRoles);
+  bool get canAccessAdmin =>
+      hasPermission(Permissions.manageUsers) ||
+      hasPermission(Permissions.manageRoles);
 
   /// Can access sub-admin features - uses API permissions
-  bool get canAccessSubAdmin => hasPermission(Permissions.manageTopics) || canAccessAdmin;
+  bool get canAccessSubAdmin =>
+      hasPermission(Permissions.manageTopics) || canAccessAdmin;
 
   /// Can access editor features - uses API permissions
-  bool get canAccessEditor => hasPermission(Permissions.editNews) || canAccessSubAdmin;
+  bool get canAccessEditor =>
+      hasPermission(Permissions.editNews) || canAccessSubAdmin;
 
   /// Can post ads - uses API permissions (fallback to create news for now)
   bool get canPostAds => hasPermission(Permissions.createNews);
@@ -107,7 +118,7 @@ extension UserRoleExtension on User {
   }
 
   /// Check if user has complete location data
-  bool get hasCompleteLocation => 
+  bool get hasCompleteLocation =>
       stateId != null && districtId != null && mandalId != null;
 
   /// Get role display name with location
@@ -150,47 +161,57 @@ extension UserRoleExtension on User {
 
     // Add role-specific navigation items
     if (canUploadContent) {
-      items.add(NavigationItem(
-        icon: 'upload',
-        label: 'Upload',
-        route: '/upload',
-        isVisible: true,
-      ));
+      items.add(
+        NavigationItem(
+          icon: 'upload',
+          label: 'Upload',
+          route: '/upload',
+          isVisible: true,
+        ),
+      );
     }
 
     if (canModerateContent) {
-      items.add(NavigationItem(
-        icon: 'moderate',
-        label: 'Moderate',
-        route: '/moderate',
-        isVisible: true,
-      ));
+      items.add(
+        NavigationItem(
+          icon: 'moderate',
+          label: 'Moderate',
+          route: '/moderate',
+          isVisible: true,
+        ),
+      );
     }
 
     if (canManageUsers) {
-      items.add(NavigationItem(
-        icon: 'users',
-        label: 'Users',
-        route: '/users',
-        isVisible: true,
-      ));
+      items.add(
+        NavigationItem(
+          icon: 'users',
+          label: 'Users',
+          route: '/users',
+          isVisible: true,
+        ),
+      );
     }
 
     if (canAccessAdmin) {
-      items.add(NavigationItem(
-        icon: 'admin',
-        label: 'Admin',
-        route: '/admin',
-        isVisible: true,
-      ));
+      items.add(
+        NavigationItem(
+          icon: 'admin',
+          label: 'Admin',
+          route: '/admin',
+          isVisible: true,
+        ),
+      );
     }
 
-    items.add(NavigationItem(
-      icon: 'profile',
-      label: 'Profile',
-      route: '/profile',
-      isVisible: true,
-    ));
+    items.add(
+      NavigationItem(
+        icon: 'profile',
+        label: 'Profile',
+        route: '/profile',
+        isVisible: true,
+      ),
+    );
 
     return items;
   }

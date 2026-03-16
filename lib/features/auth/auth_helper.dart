@@ -4,27 +4,20 @@ import '../../core/routing/app_router.dart';
 import '../../providers/app_providers.dart';
 
 class AuthHelper {
-  /// Shows login dialog when authentication is required for specific actions
-  /// Returns true if user successfully logged in, false if cancelled
   static Future<bool> requireAuth(
     BuildContext context,
     WidgetRef ref, {
     String? message,
     String? title,
   }) async {
-    // Initialize auth state to check for stored tokens
-    final authViewModel = ref.read(authViewModelProvider);
-    await authViewModel.initializeAuth();
-
-    // Check current authentication state after initialization
     final authState = ref.read(authViewModelProvider);
 
-    // If already authenticated, return true
+    // Check cached auth state first (fast check)
     if (authState.isAuthenticated) {
       return true;
     }
 
-    // Show dialog explaining why login is needed
+    // If not authenticated, show login prompt
     final shouldLogin = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -47,10 +40,8 @@ class AuthHelper {
     );
 
     if (shouldLogin == true) {
-      // Navigate to login screen
       await Navigator.pushNamed(context, AppRouter.login);
 
-      // Check if login was successful
       final newAuthState = ref.read(authViewModelProvider);
       return newAuthState.isAuthenticated;
     }
@@ -58,12 +49,10 @@ class AuthHelper {
     return false;
   }
 
-  /// Check if user is authenticated without showing dialogs
   static Future<bool> isAuthenticated(WidgetRef ref) async {
-    // Initialize auth state to check for stored tokens
     final authViewModel = ref.read(authViewModelProvider);
     await authViewModel.initializeAuth();
-    
+
     final authState = ref.read(authViewModelProvider);
     return authState.isAuthenticated;
   }

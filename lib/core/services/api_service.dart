@@ -87,16 +87,19 @@ class ApiService {
   Future<dynamic> get(
     String path, {
     Map<String, String> headers = const {},
+    Map<String, String> queryParameters = const {},
     bool useAuth = false,
     bool showErrorAlert = true,
   }) async {
     try {
       final requestHeaders = {...headers, if (useAuth) ..._authHeaders};
 
-      final response = await http.get(
-        Uri.parse('$baseUrl$path'),
-        headers: requestHeaders,
-      );
+      // Build URI with query parameters only if they exist
+      final uri = queryParameters.isNotEmpty
+          ? Uri.parse('$baseUrl$path').replace(queryParameters: queryParameters)
+          : Uri.parse('$baseUrl$path');
+
+      final response = await http.get(uri, headers: requestHeaders);
       if (response.statusCode == 200) {
         return json.decode(response.body);
       } else {
@@ -316,7 +319,7 @@ class ApiService {
   // Multipart form-data POST for file uploads
   Future<Map<String, dynamic>> postMultipart(
     String path, {
-    required Map<String, String> fields,
+    required Map<String, dynamic> fields,
     List<File>? files,
     String fileFieldName = 'files[]',
     bool useAuth = true,
@@ -330,8 +333,10 @@ class ApiService {
         request.headers['Authorization'] = 'Bearer $_authToken';
       }
 
-      // Add form fields
-      request.fields.addAll(fields);
+      // Add form fields (values must be strings for multipart)
+      fields.forEach((key, value) {
+        request.fields[key] = value.toString();
+      });
 
       // Add files
       if (files != null && files.isNotEmpty) {

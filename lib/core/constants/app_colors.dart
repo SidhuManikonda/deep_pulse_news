@@ -12,9 +12,9 @@ extension AppColorsExtension on ThemeData {
 
   // Background Colors (theme-aware)
   Color get appBackground =>
-      _isLight ? const Color(0xFFFFFFFF) : const Color(0xFF1A202C);
+      _isLight ? const Color(0xFFFFFFFF) : const Color(0xFF000000);
   Color get appSurface =>
-      _isLight ? const Color(0xFFF7FAFC) : const Color(0xFF2D3748);
+      _isLight ? const Color(0xFFF7FAFC) : const Color(0xFF1A1A1A);
 
   // Text Colors (theme-aware)
   Color get appTextPrimary =>
@@ -76,7 +76,7 @@ extension AppColorsExtension on ThemeData {
       _isLight ? const Color(0xFF718096) : const Color(0xFFA0AEC0);
 
   // Card Colors (theme-aware)
-  Color get appCard => _isLight ? const Color(0xFFF7FAFC) : const Color(0xFF2D3748);
+  Color get appCard => _isLight ? const Color(0xFFF7FAFC) : const Color(0xFF1A1A1A);
 
   // Shimmer Colors (theme-aware)
   Color get shimmerBaseColor =>
@@ -126,31 +126,32 @@ const Color appCardLightColor = Color(0xFFF7FAFC);
 const Color shimmerBaseLightColor = Color(0xFFE5E7EB);
 const Color shimmerHighlightLightColor = Color(0xFFF3F4F6);
 const Color appDividerLightColor = Color(0xFFE5E7EB);
+//------------------------------------------------------------------------------
 // Dark Theme Color Constants
 //------------------------------------------------------------------------------
-const Color appBackgroundDarkColor = Color(0xFF1A202C);
-const Color appSurfaceDarkColor = Color(0xFF2D3748);
+const Color appBackgroundDarkColor = Color(0xFF000000);
+const Color appSurfaceDarkColor = Color(0xFF1A1A1A);
 const Color appTextPrimaryDarkColor = Color(0xFFFFFFFF);
 const Color appTextSecondaryDarkColor = Color(0xFFA0AEC0);
 const Color appTextLightDarkColor = Color(0xFF718096);
 const Color appTextHeaderDarkColor = Color(0xFFFFFFFF);
 const Color appTextBodyDarkColor = Color(0xFFA0AEC0);
 const Color appTextCaptionDarkColor = Color(0xFF718096);
-const Color appGrey50DarkColor = Color(0xFF111827);
-const Color appGrey100DarkColor = Color(0xFF1F2937);
-const Color appGrey200DarkColor = Color(0xFF374151);
-const Color appGrey300DarkColor = Color(0xFF4B5563);
-const Color appGrey400DarkColor = Color(0xFF6B7280);
-const Color appGrey600DarkColor = Color(0xFF9CA3AF);
-const Color appGrey700DarkColor = Color(0xFFD1D5DB);
-const Color appGrey800DarkColor = Color(0xFFE5E7EB);
-const Color appGrey900DarkColor = Color(0xFFF3F4F6);
+const Color appGrey50DarkColor = Color(0xFF0A0A0A);
+const Color appGrey100DarkColor = Color(0xFF141414);
+const Color appGrey200DarkColor = Color(0xFF1F1F1F);
+const Color appGrey300DarkColor = Color(0xFF2A2A2A);
+const Color appGrey400DarkColor = Color(0xFF3D3D3D);
+const Color appGrey600DarkColor = Color(0xFF666666);
+const Color appGrey700DarkColor = Color(0xFF808080);
+const Color appGrey800DarkColor = Color(0xFF999999);
+const Color appGrey900DarkColor = Color(0xFFB3B3B3);
 const Color appBottomNavSelectedDarkColor = Color(0xFFE53E3E);
 const Color appBottomNavUnselectedDarkColor = Color(0xFFA0AEC0);
-const Color appCardDarkColor = Color(0xFF2D3748);
-const Color shimmerBaseDarkColor = Color(0xFF374151);
-const Color shimmerHighlightDarkColor = Color(0xFF4B5563);
-const Color appDividerDarkColor = Color(0xFF4B5563);
+const Color appCardDarkColor = Color(0xFF1A1A1A);
+const Color shimmerBaseDarkColor = Color(0xFF1F1F1F);
+const Color shimmerHighlightDarkColor = Color(0xFF2A2A2A);
+const Color appDividerDarkColor = Color(0xFF2A2A2A);
 //------------------------------------------------------------------------------
 // Category Colors (same for both themes)
 //------------------------------------------------------------------------------

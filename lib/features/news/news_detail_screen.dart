@@ -4,17 +4,55 @@ import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_font_sizes.dart';
 import '../../shared/widgets/auto_scaled_text.dart';
 import '../../data/models/news.dart';
+import '../../data/repositories/news_repository.dart';
+import '../comments/comments_screen.dart';
+import '../../shared/widgets/video_player_widget.dart';
+import '../../shared/widgets/cached_image_widget.dart';
+import '../../core/services/video_preloader_service.dart';
 
-class NewsDetailScreen extends ConsumerWidget {
-  final News newsItem;
+class NewsDetailScreen extends ConsumerStatefulWidget {
+  final News initialNewsItem;
+  final VoidCallback? onCommentPosted;
 
   const NewsDetailScreen({
     super.key,
-    required this.newsItem,
+    required this.initialNewsItem,
+    this.onCommentPosted,
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<NewsDetailScreen> createState() => _NewsDetailScreenState();
+}
+
+class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
+  late News _newsItem;
+  late final NewsRepository _newsRepository;
+  final _videoPreloader = VideoPreloaderService();
+  final Map<int, int> _currentCarouselPages = {}; // Track carousel page per news item
+
+  @override
+  void initState() {
+    super.initState();
+    _newsItem = widget.initialNewsItem;
+    _newsRepository = NewsRepositoryImpl();
+  }
+
+  Future<void> _refreshNewsItem() async {
+    try {
+      final updatedNews = await _newsRepository.getNewsById(_newsItem.id);
+      if (updatedNews != null && mounted) {
+        setState(() {
+          _newsItem = updatedNews;
+        });
+      }
+    } catch (e) {
+      // Handle error silently or show snackbar
+      print('Failed to refresh news item: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
@@ -25,7 +63,11 @@ class NewsDetailScreen extends ConsumerWidget {
             Icons.arrow_back,
             color: Theme.of(context).textTheme.bodyLarge?.color,
           ),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () {
+            // Pause all videos before navigating back
+            _videoPreloader.pauseAllVideos();
+            Navigator.pop(context);
+          },
         ),
         actions: [
           IconButton(
@@ -52,8 +94,8 @@ class NewsDetailScreen extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Images section
-            if (_getNewsImages().isNotEmpty) _buildImagesSection(context),
+            // Media section
+            if (_newsItem.media.isNotEmpty) _buildMediaSection(context),
 
             // Content section
             Padding(
@@ -65,7 +107,7 @@ class NewsDetailScreen extends ConsumerWidget {
                   AutoScaledText(
                     _getNewsTitle(),
                     style: TextStyle(
-                      fontSize: appFontSizeTitle,
+                      fontSize: 19,
                       fontWeight: FontWeight.bold,
                       color: Theme.of(context).textTheme.headlineLarge?.color,
                       height: 1.3,
@@ -84,9 +126,9 @@ class NewsDetailScreen extends ConsumerWidget {
                       ),
                       const SizedBox(width: 4),
                       AutoScaledText(
-                        _formatTimestamp(newsItem.createdAt),
+                        _formatTimestamp(_newsItem.createdAt),
                         style: TextStyle(
-                          fontSize: appFontSizeCaption,
+                          fontSize: 12,
                           color: Theme.of(context).appGrey600,
                         ),
                       ),
@@ -98,9 +140,9 @@ class NewsDetailScreen extends ConsumerWidget {
                       ),
                       const SizedBox(width: 4),
                       AutoScaledText(
-                        '${newsItem.viewsCount} views',
+                        '${_newsItem.viewsCount} views',
                         style: TextStyle(
-                          fontSize: appFontSizeCaption,
+                          fontSize: 12,
                           color: Theme.of(context).appGrey600,
                         ),
                       ),
@@ -113,8 +155,8 @@ class NewsDetailScreen extends ConsumerWidget {
                   AutoScaledText(
                     _getNewsContent(),
                     style: TextStyle(
-                      fontSize: appFontSizeBody,
-                      color: Theme.of(context).textTheme.bodyMedium?.color,
+                      fontSize: 18.0,
+                      color: Theme.of(context).textTheme.bodyLarge?.color,
                       height: 1.6,
                     ),
                   ),
@@ -123,11 +165,6 @@ class NewsDetailScreen extends ConsumerWidget {
 
                   // Interaction section
                   _buildInteractionSection(context),
-
-                  const SizedBox(height: 24),
-
-                  // Related news section
-                  _buildRelatedNewsSection(context),
                 ],
               ),
             ),
@@ -137,107 +174,272 @@ class NewsDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildImagesSection(BuildContext context) {
-    final images = _getNewsImages();
-    if (images.length == 1) {
-      return Container(
-        height: 250,
+  Widget _buildMediaSection(BuildContext context) {
+    final mediaItems = _newsItem.media.take(3).toList();
+    final mediaCount = mediaItems.length;
+
+    if (mediaCount == 0) {
+      return const SizedBox.shrink();
+    }
+
+    if (mediaCount == 1) {
+      // Single media item - use 4:3 aspect ratio like home screen
+      final media = mediaItems[0];
+      return SizedBox(
         width: double.infinity,
-        margin: const EdgeInsets.symmetric(horizontal: 16),
-        decoration: BoxDecoration(
-          color: Theme.of(context).appGrey200,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Image.network(
-            images[0],
-            fit: BoxFit.cover,
-            width: double.infinity,
-            height: 250,
-            loadingBuilder: (context, child, loadingProgress) {
-              if (loadingProgress == null) return child;
-              return Container(
-                color: Theme.of(context).appGrey200,
-                child: const Center(child: CircularProgressIndicator()),
-              );
-            },
-            errorBuilder: (context, error, stackTrace) {
-              return Container(
-                color: Theme.of(context).appGrey200,
-                child: Center(
-                  child: Icon(
-                    Icons.image,
-                    size: 64,
-                    color: Theme.of(context).appGrey400,
+        child: AspectRatio(
+          aspectRatio: 4 / 3,
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            decoration: BoxDecoration(
+              color: Theme.of(context).appGrey200,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: SizedBox.expand(
+                    child: media.type == 'video'
+                        ? VideoPlayerWidget(
+                            videoUrl: media.fileUrl,
+                            autoPlay: false,
+                            isVisible: true,
+                          )
+                        : CachedImageWidget(
+                            imageUrl: media.fileUrl,
+                            fit: BoxFit.cover,
+                            errorWidget: Container(
+                              color: Theme.of(context).appGrey200,
+                              child: Center(
+                                child: Icon(
+                                  Icons.image,
+                                  size: 64,
+                                  color: Theme.of(context).appGrey400,
+                                ),
+                              ),
+                            ),
+                          ),
                   ),
                 ),
-              );
-            },
+                // Timestamp overlay at bottom left
+                Positioned(
+                  bottom: 12,
+                  left: 12,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.6),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: AutoScaledText(
+                      _formatTimestamp(_newsItem.createdAt),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ),
+                // App logo/name overlay at bottom right (small and subtle)
+                Positioned(
+                  bottom: 8,
+                  right: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.4),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 12,
+                          height: 12,
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).appPrimary,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                          child: Icon(
+                            Icons.newspaper,
+                            size: 8,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        AutoScaledText(
+                          'Deep Pulse',
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       );
     } else {
-      return Container(
-        height: 250,
-        margin: const EdgeInsets.symmetric(horizontal: 16),
-        child: PageView.builder(
-          itemCount: images.length,
-          itemBuilder: (context, index) {
-            return Container(
-              margin: const EdgeInsets.only(right: 8),
-              decoration: BoxDecoration(
+      // Multiple media items with PageView slider (up to 3) - use 16:9 aspect ratio like home screen
+      final currentCarouselPage = _currentCarouselPages[_newsItem.id] ?? 0;
+
+      return AspectRatio(
+        aspectRatio: 16 / 9,
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Stack(
+            children: [
+              ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.network(
-                  images[index],
-                  fit: BoxFit.cover,
-                  width: double.infinity,
-                  height: 250,
-                  loadingBuilder: (context, child, loadingProgress) {
-                    if (loadingProgress == null) return child;
-                    return Container(
-                      color: Theme.of(context).appGrey200,
-                      child: const Center(child: CircularProgressIndicator()),
-                    );
+                child: PageView.builder(
+                  itemCount: mediaCount,
+                  onPageChanged: (page) {
+                    setState(() {
+                      _currentCarouselPages[_newsItem.id] = page;
+                    });
+                    // Pause all videos in this carousel when switching pages
+                    _videoPreloader.pauseAllVideos();
                   },
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      color: Theme.of(context).appGrey200,
-                      child: Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.image,
-                              size: 64,
-                              color: Theme.of(context).appGrey400,
-                            ),
-                            const SizedBox(height: 8),
-                            AutoScaledText(
-                              'Image ${index + 1}',
-                              style: TextStyle(
-                                fontSize: appFontSizeCaption,
-                                color: Theme.of(context).appGrey600,
+                  itemBuilder: (context, carouselIndex) {
+                    final media = mediaItems[carouselIndex];
+                    final isMediaVisible = carouselIndex == currentCarouselPage;
+
+                    return SizedBox.expand(
+                      child: media.type == 'video'
+                          ? VideoPlayerWidget(
+                              videoUrl: media.fileUrl,
+                              autoPlay: false,
+                              isVisible: isMediaVisible,
+                            )
+                          : CachedImageWidget(
+                              imageUrl: media.fileUrl,
+                              fit: BoxFit.cover,
+                              errorWidget: Container(
+                                color: Theme.of(context).appGrey200,
+                                child: Center(
+                                  child: Icon(
+                                    Icons.image,
+                                    size: 64,
+                                    color: Theme.of(context).appGrey400,
+                                  ),
+                                ),
                               ),
                             ),
-                          ],
-                        ),
-                      ),
                     );
                   },
                 ),
               ),
-            );
-          },
+              // Media counter indicator
+              Positioned(
+                top: 12,
+                right: 12,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.6),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: AutoScaledText(
+                    '${currentCarouselPage + 1}/$mediaCount',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ),
+              // Timestamp overlay at bottom left
+              Positioned(
+                bottom: 12,
+                left: 12,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.6),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: AutoScaledText(
+                    _formatTimestamp(_newsItem.createdAt),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ),
+              // App logo/name overlay at bottom right (small and subtle)
+              Positioned(
+                bottom: 8,
+                right: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.4),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 12,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).appPrimary,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                        child: Icon(
+                          Icons.newspaper,
+                          size: 8,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      AutoScaledText(
+                        'Deep Pulse',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }
   }
 
   Widget _buildInteractionSection(BuildContext context) {
+    // Determine like status colors
+    final likeColor = _newsItem.isLiked == 1
+        ? Colors.blue
+        : Theme.of(context).appGrey600;
+    final dislikeColor = _newsItem.isLiked == 0
+        ? Colors.red
+        : Theme.of(context).appGrey600;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -251,22 +453,46 @@ class NewsDetailScreen extends ConsumerWidget {
           _buildInteractionButton(
             context,
             Icons.thumb_up_outlined,
-            '0', // API doesn't provide like count
+            _newsItem.likesCount.toString(),
+            likeColor,
             () {},
           ),
           _buildInteractionButton(
             context,
             Icons.thumb_down_outlined,
-            '0', // API doesn't provide dislike count
+            '0', // No dislikes count available
+            dislikeColor,
             () {},
           ),
           _buildInteractionButton(
             context,
             Icons.comment_outlined,
-            newsItem.commentsCount.toString(),
+            _newsItem.commentsCount.toString(),
+            Theme.of(context).appGrey600,
+            () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => CommentsScreen(
+                    news: _newsItem,
+                    onCommentPosted: () async {
+                      // Refresh local news item
+                      await _refreshNewsItem();
+                      // Also call parent callback to refresh home screen
+                      widget.onCommentPosted?.call();
+                    },
+                  ),
+                ),
+              );
+            },
+          ),
+          _buildInteractionButton(
+            context,
+            Icons.share_outlined,
+            _newsItem.sharesCount.toString(),
+            Theme.of(context).appGrey600,
             () {},
           ),
-          _buildInteractionButton(context, Icons.share_outlined, '', () {}),
         ],
       ),
     );
@@ -276,13 +502,14 @@ class NewsDetailScreen extends ConsumerWidget {
     BuildContext context,
     IconData icon,
     String count,
+    Color iconColor,
     VoidCallback onTap,
   ) {
-    return GestureDetector(
+    return InkWell(
       onTap: onTap,
       child: Column(
         children: [
-          Icon(icon, size: 24, color: Theme.of(context).appGrey600),
+          Icon(icon, size: 24, color: iconColor),
           if (count.isNotEmpty) ...[
             const SizedBox(height: 4),
             AutoScaledText(
@@ -370,21 +597,17 @@ class NewsDetailScreen extends ConsumerWidget {
 
   // Helper methods to extract data from News object
   String _getNewsTitle() {
-    if (newsItem.translations.isNotEmpty) {
-      return newsItem.translations.first.title;
+    if (_newsItem.translations.isNotEmpty) {
+      return _newsItem.translations.first.title;
     }
     return 'No title available';
   }
 
   String _getNewsContent() {
-    if (newsItem.translations.isNotEmpty) {
-      return newsItem.translations.first.content;
+    if (_newsItem.translations.isNotEmpty) {
+      return _newsItem.translations.first.content;
     }
     return 'No content available';
-  }
-
-  List<String> _getNewsImages() {
-    return newsItem.media.map((media) => media.url).toList();
   }
 
   String _formatTimestamp(DateTime timestamp) {

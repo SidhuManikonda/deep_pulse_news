@@ -59,8 +59,8 @@ class TopicsRepositoryImpl implements TopicsRepository {
       // Create the request body with the exact format expected by the API
       final requestBody = {
         'name': topic.name,
-        'is_active': topic.isActive ? 1 : 0,
-        'is_trending': topic.isTrending ? 1 : 0,
+        'is_active': topic.isActive ?? 0,
+        'is_trending': topic.isTrending ?? 0,
       };
 
       final response = await _apiService.post(
@@ -90,8 +90,8 @@ class TopicsRepositoryImpl implements TopicsRepository {
       // Create the request body with the exact format expected by the API
       final requestBody = {
         'name': topic.name,
-        'is_active': topic.isActive ? 1 : 0,
-        'is_trending': topic.isTrending ? 1 : 0,
+        'is_active': topic.isActive ?? 0,
+        'is_trending': topic.isTrending ?? 0,
       };
 
       final response = await _apiService.put(

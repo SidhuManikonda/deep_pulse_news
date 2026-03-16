@@ -43,6 +43,11 @@ dependencies:
   google_fonts: ^6.1.0
   permission_handler: ^11.3.0
   image_picker: ^1.0.4
+  url_launcher: ^6.2.5
+  share_plus: ^9.0.0
+  video_player: ^2.8.2
+  flutter_cache_manager: ^3.3.1
+  video_compress: ^3.1.2
 
 dev_dependencies:
   flutter_test:

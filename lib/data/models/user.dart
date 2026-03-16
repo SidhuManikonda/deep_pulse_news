@@ -3,11 +3,13 @@ class User {
   final String name;
   final String email;
   final String mobile;
+  final String? otpCode;
   final DateTime? otpExpiresAt;
   final bool isActive;
   final DateTime? emailVerifiedAt;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final String? rememberToken;
   final List<Role>? roles;
   final int? stateId;
   final int? districtId;
@@ -21,11 +23,13 @@ class User {
     required this.name,
     required this.email,
     required this.mobile,
+    this.otpCode,
     this.otpExpiresAt,
     required this.isActive,
     this.emailVerifiedAt,
     required this.createdAt,
     required this.updatedAt,
+    this.rememberToken,
     this.roles,
     this.stateId,
     this.districtId,
@@ -41,15 +45,19 @@ class User {
       name: json['name'] ?? '',
       email: json['email'] ?? '',
       mobile: json['mobile'] ?? '',
+      otpCode: json['otp_code'],
       otpExpiresAt: json['otp_expires_at'] != null 
           ? DateTime.parse(json['otp_expires_at']) 
           : null,
-      isActive: json['is_active'] ?? true,
+      isActive: json['is_active'] is int
+          ? json['is_active'] == 1
+          : json['is_active'] ?? true,
       emailVerifiedAt: json['email_verified_at'] != null 
           ? DateTime.parse(json['email_verified_at']) 
           : null,
       createdAt: DateTime.parse(json['created_at']),
       updatedAt: DateTime.parse(json['updated_at']),
+      rememberToken: json['remember_token'],
       roles: json['roles'] != null 
           ? (json['roles'] as List).map((role) => Role.fromJson(role)).toList()
           : null,
@@ -68,11 +76,13 @@ class User {
       'name': name,
       'email': email,
       'mobile': mobile,
+      'otp_code': otpCode,
       'otp_expires_at': otpExpiresAt?.toIso8601String(),
       'is_active': isActive,
       'email_verified_at': emailVerifiedAt?.toIso8601String(),
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
+      'remember_token': rememberToken,
       'roles': roles?.map((role) => role.toJson()).toList(),
       'state_id': stateId,
       'district_id': districtId,
@@ -88,11 +98,13 @@ class User {
     String? name,
     String? email,
     String? mobile,
+    String? otpCode,
     DateTime? otpExpiresAt,
     bool? isActive,
     DateTime? emailVerifiedAt,
     DateTime? createdAt,
     DateTime? updatedAt,
+    String? rememberToken,
     List<Role>? roles,
     int? stateId,
     int? districtId,
@@ -106,11 +118,13 @@ class User {
       name: name ?? this.name,
       email: email ?? this.email,
       mobile: mobile ?? this.mobile,
+      otpCode: otpCode ?? this.otpCode,
       otpExpiresAt: otpExpiresAt ?? this.otpExpiresAt,
       isActive: isActive ?? this.isActive,
       emailVerifiedAt: emailVerifiedAt ?? this.emailVerifiedAt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      rememberToken: rememberToken ?? this.rememberToken,
       roles: roles ?? this.roles,
       stateId: stateId ?? this.stateId,
       districtId: districtId ?? this.districtId,

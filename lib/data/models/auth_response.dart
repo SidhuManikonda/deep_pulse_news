@@ -74,3 +74,38 @@ class LoginRequest {
     };
   }
 }
+
+class CreateUserRequest {
+  final String name;
+  final String email;
+  final String mobile;
+  final String password;
+  final int userRole;
+  final int? stateId;
+  final int? districtId;
+  final int? mandalId;
+
+  CreateUserRequest({
+    required this.name,
+    required this.email,
+    required this.mobile,
+    required this.password,
+    required this.userRole,
+    this.stateId,
+    this.districtId,
+    this.mandalId,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'name': name,
+      'email': email,
+      'mobile': mobile,
+      'password': password,
+      'user_role': userRole,
+      if (stateId != null) 'state_id': stateId,
+      if (districtId != null) 'district_id': districtId,
+      if (mandalId != null) 'mandal_id': mandalId,
+    };
+  }
+}

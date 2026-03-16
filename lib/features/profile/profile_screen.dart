@@ -1,4 +1,5 @@
 import 'package:deep_pulse_news/core/constants/app_constants.dart';
+import 'package:deep_pulse_news/shared/widgets/auto_scaled_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/app_colors.dart';
@@ -9,6 +10,8 @@ import '../../core/services/onboarding_storage.dart';
 import '../../data/models/state.dart' as location_models;
 import '../../data/models/district.dart';
 import '../../data/models/mandal.dart';
+import '../../extensions/user_extensions.dart';
+import '../../features/admin/admin_user_management_hub_screen.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -19,20 +22,20 @@ class ProfileScreen extends ConsumerStatefulWidget {
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   final OnboardingStorage _storage = OnboardingStorage();
-  
+
   location_models.State? _selectedState;
   District? _selectedDistrict;
   Mandal? _selectedMandal;
   Map<String, dynamic>? _selectedLanguage;
   List<Map<String, dynamic>> _selectedTopics = [];
   bool _isLoadingLocation = false;
-  
+
   @override
   void initState() {
     super.initState();
     _loadLocationData();
   }
-  
+
   Future<void> _loadLocationData() async {
     setState(() => _isLoadingLocation = true);
     try {
@@ -41,7 +44,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       final mandal = await _storage.getSelectedMandal();
       final language = await _storage.getSelectedLanguage();
       final topics = await _storage.getSelectedTopics();
-      
+
       setState(() {
         _selectedState = state;
         _selectedDistrict = district;
@@ -54,7 +57,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
     setState(() => _isLoadingLocation = false);
   }
-  
+
   @override
   Widget build(BuildContext context) {
     final authViewModel = ref.watch(authViewModelProvider);
@@ -109,7 +112,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           ],
                         ),
                         child: Center(
-                          child: Text(
+                          child: AutoScaledText(
                             isAuthenticated && user.name.isNotEmpty
                                 ? user.name[0].toUpperCase()
                                 : 'G', // G for Guest
@@ -123,8 +126,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       ),
                       const SizedBox(height: 12),
                       // User Name or Guest
-                      Text(
-                        isAuthenticated ? (user.name.isNotEmpty ? user.name : 'User') : 'Guest User',
+                      AutoScaledText(
+                        isAuthenticated
+                            ? (user.name.isNotEmpty ? user.name : 'User')
+                            : 'Guest User',
                         style: const TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.bold,
@@ -133,15 +138,44 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       ),
                       const SizedBox(height: 4),
                       // Location or Login prompt
-                      Text(
-                        isAuthenticated 
-                          ? (user.email.isNotEmpty ? user.email : 'No email set')
-                          : _getLocationDisplayText(),
+                      AutoScaledText(
+                        isAuthenticated
+                            ? (user.email.isNotEmpty
+                                  ? user.email
+                                  : 'No email set')
+                            : _getLocationDisplayText(),
                         style: TextStyle(
                           fontSize: 14,
                           color: Colors.white.withOpacity(0.9),
                         ),
                       ),
+                      // const Divider(),
+                      // Center(
+                      //   child: Row(
+                      //     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      //     children: [
+                      //       AutoScaledText(
+                      //         "Followers 150",
+                      //         style: TextStyle(
+                      //           fontSize: 14,
+                      //           color: Colors.white.withOpacity(0.9),
+                      //         ),
+                      //       ),
+                      //       Container(
+                      //         color: Theme.of(context).appDivider,
+                      //         width: 1,
+                      //         height: 20,
+                      //       ),
+                      //       AutoScaledText(
+                      //         "Following 150",
+                      //         style: TextStyle(
+                      //           fontSize: 14,
+                      //           color: Colors.white.withOpacity(0.9),
+                      //         ),
+                      //       ),
+                      //     ],
+                      //   ),
+                      // ),
                     ],
                   ),
                 ),
@@ -165,7 +199,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         icon: Icons.person_outline,
                         iconColor: theme.appPrimary,
                         title: 'Personal Information',
-                        subtitle: user.name.isNotEmpty ? user.name : 'Update your details',
+                        subtitle: user.name.isNotEmpty
+                            ? user.name
+                            : 'Update your details',
                         onTap: () => _showPersonalInfoSheet(context, user),
                       ),
                       _buildDivider(),
@@ -173,7 +209,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         icon: Icons.phone_outlined,
                         iconColor: Colors.green,
                         title: 'Mobile Number',
-                        subtitle: user.mobile.isNotEmpty ? user.mobile : 'Not set',
+                        subtitle: user.mobile.isNotEmpty
+                            ? user.mobile
+                            : 'Not set',
                         onTap: () {},
                       ),
                       _buildDivider(),
@@ -181,7 +219,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         icon: Icons.email_outlined,
                         iconColor: Colors.orange,
                         title: 'Email',
-                        subtitle: user.email.isNotEmpty ? user.email : 'Not set',
+                        subtitle: user.email.isNotEmpty
+                            ? user.email
+                            : 'Not set',
                         trailing: user.emailVerifiedAt != null
                             ? Container(
                                 padding: const EdgeInsets.symmetric(
@@ -192,7 +232,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                   color: Colors.green.withOpacity(0.1),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
-                                child: const Text(
+                                child: const AutoScaledText(
                                   'Verified',
                                   style: TextStyle(
                                     fontSize: 12,
@@ -217,6 +257,30 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     ]),
                   const SizedBox(height: 24),
 
+                  // Management Section - Only show for admin and sub-admin roles
+                  if (isAuthenticated &&
+                      (user.primaryRole.value == 'admin' ||
+                          user.primaryRole.value == 'sub_admin')) ...[
+                    _buildSectionHeader('Management'),
+                    const SizedBox(height: 12),
+                    _buildProfileCard([
+                      _buildProfileTile(
+                        icon: Icons.people_alt_outlined,
+                        iconColor: theme.appPrimary,
+                        title: 'User Management',
+                        subtitle: 'View users and create new users',
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                const AdminUserManagementHubScreen(),
+                          ),
+                        ),
+                      ),
+                    ]),
+                    const SizedBox(height: 24),
+                  ],
+
                   // Preferences Section
                   _buildSectionHeader('Preferences'),
                   const SizedBox(height: 12),
@@ -233,7 +297,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       icon: Icons.location_on_outlined,
                       iconColor: Colors.red,
                       title: 'Location',
-                      subtitle: _isLoadingLocation ? 'Loading...' : _getLocationDisplayText(),
+                      subtitle: _isLoadingLocation
+                          ? 'Loading...'
+                          : _getLocationDisplayText(),
                       onTap: () => _navigateToLocationChange(context),
                     ),
                     _buildDivider(),
@@ -290,7 +356,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       icon: Icons.text_fields,
                       iconColor: Colors.teal,
                       title: 'Font Size',
-                      subtitle: ref.watch(fontControllerProvider).currentFontSize.displayName,
+                      subtitle: ref
+                          .watch(fontControllerProvider)
+                          .currentFontSize
+                          .displayName,
                       onTap: () => _showFontSizeSheet(context),
                     ),
                   ]),
@@ -337,8 +406,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   const SizedBox(height: 24),
 
                   // Logout Button - Only show if authenticated
-                  if (isAuthenticated)
-                    _buildLogoutButton(context),
+                  if (isAuthenticated) _buildLogoutButton(context),
                   const SizedBox(height: 32),
                 ],
               ),
@@ -350,7 +418,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Widget _buildSectionHeader(String title) {
-    return Text(
+    return AutoScaledText(
       title,
       style: TextStyle(
         fontSize: 18,
@@ -386,6 +454,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     required VoidCallback onTap,
   }) {
     return ListTile(
+      hoverColor: Colors.transparent,
+      splashColor: Colors.transparent,
+      focusColor: Colors.transparent,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       leading: Container(
         width: 44,
@@ -396,7 +467,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         ),
         child: Icon(icon, color: iconColor, size: 22),
       ),
-      title: Text(
+      title: AutoScaledText(
         title,
         style: TextStyle(
           fontSize: 15,
@@ -404,7 +475,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           color: Theme.of(context).textTheme.bodyLarge?.color,
         ),
       ),
-      subtitle: Text(
+      subtitle: AutoScaledText(
         subtitle,
         style: TextStyle(
           fontSize: 13,
@@ -418,15 +489,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             color: Theme.of(context).textTheme.bodySmall?.color,
           ),
       onTap: onTap,
-    );
-  }
-
-  Widget _buildDivider() {
-    return Divider(
-      height: 1,
-      indent: 76,
-      endIndent: 16,
-      color: Theme.of(context).appDivider,
     );
   }
 
@@ -458,7 +520,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               children: const [
                 Icon(Icons.logout, color: Colors.white),
                 SizedBox(width: 12),
-                Text(
+                AutoScaledText(
                   'Logout',
                   style: TextStyle(
                     fontSize: 16,
@@ -506,7 +568,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               child: const Icon(Icons.logout, color: Colors.red, size: 32),
             ),
             const SizedBox(height: 16),
-            Text(
+            AutoScaledText(
               'Logout',
               style: TextStyle(
                 fontSize: 20,
@@ -515,7 +577,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
             ),
             const SizedBox(height: 8),
-            Text(
+            AutoScaledText(
               'Are you sure you want to logout?',
               style: TextStyle(
                 fontSize: 14,
@@ -535,7 +597,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       ),
                       side: BorderSide(color: Theme.of(ctx).dividerColor),
                     ),
-                    child: Text(
+                    child: AutoScaledText(
                       'Cancel',
                       style: TextStyle(
                         color: Theme.of(ctx).textTheme.bodyLarge?.color,
@@ -558,7 +620,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: const Text(
+                    child: const AutoScaledText(
                       'Logout',
                       style: TextStyle(
                         color: Colors.white,
@@ -578,6 +640,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   Future<void> _handleLogout() async {
     final authViewModel = ref.read(authViewModelProvider);
+
     await authViewModel.logout();
 
     if (mounted) {
@@ -611,7 +674,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            Text(
+            AutoScaledText(
               'Personal Information',
               style: TextStyle(
                 fontSize: 20,
@@ -656,14 +719,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
+          AutoScaledText(
             label,
             style: TextStyle(
               fontSize: 14,
               color: Theme.of(context).textTheme.bodyMedium?.color,
             ),
           ),
-          Text(
+          AutoScaledText(
             value,
             style: TextStyle(
               fontSize: 14,
@@ -692,25 +755,27 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   String _getLocationDisplayText() {
     if (_isLoadingLocation) return 'Loading...';
-    
-    if (_selectedMandal != null && _selectedDistrict != null && _selectedState != null) {
+
+    if (_selectedMandal != null &&
+        _selectedDistrict != null &&
+        _selectedState != null) {
       return '${_selectedMandal!.name}, ${_selectedDistrict!.name}, ${_selectedState!.name}';
     } else if (_selectedDistrict != null && _selectedState != null) {
       return '${_selectedDistrict!.name}, ${_selectedState!.name}';
     } else if (_selectedState != null) {
       return _selectedState!.name;
     }
-    
+
     return 'Location not set';
   }
-  
+
   String _getLanguageDisplayText() {
     if (_selectedLanguage != null) {
       return _selectedLanguage!['name'] ?? 'Language not set';
     }
     return 'Language not set';
   }
-  
+
   String _getTopicsDisplayText() {
     if (_selectedTopics.isNotEmpty) {
       if (_selectedTopics.length == 1) {
@@ -721,14 +786,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
     return 'No topics selected';
   }
-  
+
   void _navigateToLocationChange(BuildContext context) {
     Navigator.pushNamed(context, '/location-selection').then((_) {
       // Reload location data when returning from location screen
       _loadLocationData();
     });
   }
-  
 
   void _showNotificationSettings(BuildContext context) {
     showModalBottomSheet(
@@ -757,7 +821,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-              Text(
+              AutoScaledText(
                 'Notification Settings',
                 style: TextStyle(
                   fontSize: 20,
@@ -767,22 +831,24 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
               const SizedBox(height: 16),
               SwitchListTile(
-                title: const Text('Breaking News'),
-                subtitle: const Text('Get notified for breaking news'),
+                title: const AutoScaledText('Breaking News'),
+                subtitle: const AutoScaledText(
+                  'Get notified for breaking news',
+                ),
                 value: true,
                 activeColor: theme.appPrimary,
                 onChanged: (value) {},
               ),
               SwitchListTile(
-                title: const Text('Daily Digest'),
-                subtitle: const Text('Receive daily news summary'),
+                title: const AutoScaledText('Daily Digest'),
+                subtitle: const AutoScaledText('Receive daily news summary'),
                 value: true,
                 activeColor: theme.appPrimary,
                 onChanged: (value) {},
               ),
               SwitchListTile(
-                title: const Text('Sports Updates'),
-                subtitle: const Text('Get live sports updates'),
+                title: const AutoScaledText('Sports Updates'),
+                subtitle: const AutoScaledText('Get live sports updates'),
                 value: false,
                 activeColor: theme.appPrimary,
                 onChanged: (value) {},
@@ -805,12 +871,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           builder: (context, ref, child) {
             final fontController = ref.watch(fontControllerProvider);
             final currentFontSize = fontController.currentFontSize;
-            
+
             return Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
                 color: theme.cardColor,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(24),
+                ),
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -827,7 +895,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  Text(
+                  AutoScaledText(
                     'Font Size',
                     style: TextStyle(
                       fontSize: 20,
@@ -840,12 +908,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: FontSize.values.map((fontSize) {
                       return _buildFontSizeOption(
-                        ctx, 
-                        fontSize.displayName, 
-                        fontSize.scale, 
+                        ctx,
+                        fontSize.displayName,
+                        fontSize.scale,
                         currentFontSize == fontSize,
                         () async {
-                          await ref.read(fontControllerProvider).setFontSize(fontSize);
+                          await ref
+                              .read(fontControllerProvider)
+                              .setFontSize(fontSize);
                           Navigator.pop(ctx);
                         },
                       );
@@ -869,7 +939,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     VoidCallback onTap,
   ) {
     final theme = Theme.of(ctx);
-    return GestureDetector(
+    return InkWell(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
@@ -882,20 +952,24 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         ),
         child: Column(
           children: [
-            Text(
+            AutoScaledText(
               'Aa',
               style: TextStyle(
                 fontSize: 16 * scale,
                 fontWeight: FontWeight.bold,
-                color: isSelected ? Colors.white : theme.textTheme.bodyLarge?.color,
+                color: isSelected
+                    ? Colors.white
+                    : theme.textTheme.bodyLarge?.color,
               ),
             ),
             const SizedBox(height: 4),
-            Text(
+            AutoScaledText(
               label,
               style: TextStyle(
                 fontSize: 12,
-                color: isSelected ? Colors.white : theme.textTheme.bodyMedium?.color,
+                color: isSelected
+                    ? Colors.white
+                    : theme.textTheme.bodyMedium?.color,
               ),
             ),
           ],
@@ -929,21 +1003,21 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ),
               ),
               const SizedBox(width: 12),
-              const Text('Deep Pulse News'),
+              const AutoScaledText('Deep Pulse News'),
             ],
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Version 1.0.0'),
+              const AutoScaledText('Version 1.0.0'),
               const SizedBox(height: 8),
-              Text(
+              AutoScaledText(
                 'Stay updated with the latest news from around the world. Deep Pulse News brings you breaking news, trending stories, and personalized content.',
                 style: TextStyle(fontSize: 14, color: theme.appTextSecondary),
               ),
               const SizedBox(height: 16),
-              Text(
+              AutoScaledText(
                 '© 2026 Deep Pulse News',
                 style: TextStyle(fontSize: 12, color: theme.appTextLight),
               ),
@@ -952,11 +1026,20 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('Close'),
+              child: const AutoScaledText('Close'),
             ),
           ],
         );
       },
+    );
+  }
+
+  Widget _buildDivider() {
+    return Divider(
+      height: 1,
+      indent: 76,
+      endIndent: 16,
+      color: Theme.of(context).appDivider,
     );
   }
 }

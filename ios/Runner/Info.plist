@@ -50,5 +50,10 @@
 	<string>This app needs location access to automatically detect your area for personalized news content.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>This app needs location access to automatically detect your area for personalized news content.</string>
+	<!-- WhatsApp sharing -->
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>whatsapp</string>
+	</array>
 </dict>
 </plist>

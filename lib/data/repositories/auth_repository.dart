@@ -8,6 +8,8 @@ abstract class AuthRepository {
   Future<AuthResponse?> login(LoginRequest request);
   Future<bool> logout();
   Future<User?> getCurrentUser();
+  Future<User?> createUser(CreateUserRequest request);
+  Future<List<User>?> getUserList();
 }
 
 class AuthRepositoryImpl implements AuthRepository {
@@ -85,6 +87,72 @@ class AuthRepositoryImpl implements AuthRepository {
       }
 
       return User.fromJson(response);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  @override
+  Future<User?> createUser(CreateUserRequest request) async {
+    try {
+      final response = await _apiService.post(
+        AppConstants.user,
+        body: request.toJson(),
+        useAuth: true,
+      );
+
+      if (response.containsKey('error')) {
+        return null;
+      }
+
+      // Assuming the response contains the created user data
+      if (response.containsKey('user')) {
+        return User.fromJson(response['user']);
+      }
+
+      // Fallback: if the response is the user data directly
+      return User.fromJson(response);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  @override
+  Future<List<User>?> getUserList() async {
+    try {
+      final response = await _apiService.get(
+        AppConstants.userList,
+        useAuth: true,
+      );
+
+      // If response is a Map (error response), check for error key
+      if (response is Map && response.containsKey('error')) {
+        return null;
+      }
+
+      // If response is directly a List of users
+      if (response is List) {
+        return response.map((userJson) => User.fromJson(userJson)).toList();
+      }
+
+      // If response is wrapped in a key like 'users' or 'data'
+      if (response is Map && response.containsKey('users')) {
+        final usersData = response['users'];
+        if (usersData is List) {
+          return usersData.map((userJson) => User.fromJson(userJson)).toList();
+        }
+      }
+
+      // If response is wrapped in 'data' key
+      if (response is Map && response.containsKey('data')) {
+        final usersData = response['data'];
+        if (usersData is List) {
+          return usersData.map((userJson) => User.fromJson(userJson)).toList();
+        }
+      }
+
+      // If none of the above, return null
+      return null;
     } catch (e) {
       return null;
     }

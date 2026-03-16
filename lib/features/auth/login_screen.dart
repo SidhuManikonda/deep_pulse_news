@@ -22,7 +22,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _emailController = TextEditingController(text: "admin@example.com");
   final _passwordController = TextEditingController(text: "admin123");
   bool _obscurePassword = true;
-
+  //rama@gmail.com //admin@example.com
+  //12345678 //admin123
   @override
   void dispose() {
     _emailController.dispose();

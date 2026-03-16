@@ -2,21 +2,19 @@ class NewsMedia {
   final int id;
   final int newsId;
   final String type; // image, video, audio, etc.
-  final String url;
-  final String? fileName;
-  final int? fileSize;
-  final String? mimeType;
+  final String filePath;
+  final String fileUrl;
   final DateTime createdAt;
+  final DateTime updatedAt;
 
   NewsMedia({
     required this.id,
     required this.newsId,
     required this.type,
-    required this.url,
-    this.fileName,
-    this.fileSize,
-    this.mimeType,
+    required this.filePath,
+    required this.fileUrl,
     required this.createdAt,
+    required this.updatedAt,
   });
 
   factory NewsMedia.fromJson(Map<String, dynamic> json) {
@@ -24,11 +22,10 @@ class NewsMedia {
       id: json['id'] ?? 0,
       newsId: json['news_id'] ?? 0,
       type: json['media_type'] ?? 'image',
-      url: json['file_path'] ?? '',
-      fileName: json['file_name'],
-      fileSize: json['file_size'],
-      mimeType: json['mime_type'],
+      filePath: json['file_path'] ?? '',
+      fileUrl: json['file_url'] ?? '',
       createdAt: DateTime.parse(json['created_at'] ?? DateTime.now().toIso8601String()),
+      updatedAt: DateTime.parse(json['updated_at'] ?? DateTime.now().toIso8601String()),
     );
   }
 
@@ -36,12 +33,11 @@ class NewsMedia {
     return {
       'id': id,
       'news_id': newsId,
-      'type': type,
-      'url': url,
-      if (fileName != null) 'file_name': fileName,
-      if (fileSize != null) 'file_size': fileSize,
-      if (mimeType != null) 'mime_type': mimeType,
+      'media_type': type,
+      'file_path': filePath,
+      'file_url': fileUrl,
       'created_at': createdAt.toIso8601String(),
+      'updated_at': updatedAt.toIso8601String(),
     };
   }
 }

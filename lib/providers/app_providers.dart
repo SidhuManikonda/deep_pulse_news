@@ -1,9 +1,13 @@
+import 'package:deep_pulse_news/features/admin/admin_user_management_controller.dart';
 import 'package:flutter_riverpod/legacy.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../features/auth/auth_view_model.dart';
 import '../features/onboarding/language_view_model.dart';
 import '../features/onboarding/location_view_model.dart';
 import '../features/onboarding/topic_viewmodel.dart';
+import '../data/repositories/auth_repository.dart';
+import '../data/repositories/comments_repository.dart';
 import 'theme_controller.dart';
 
 // Language ViewModel Provider
@@ -18,7 +22,9 @@ final topicViewModelProvider = ChangeNotifierProvider<TopicViewmodel>((ref) {
 });
 
 // Location ViewModel Provider
-final locationViewModelProvider = ChangeNotifierProvider<LocationViewModel>((ref) {
+final locationViewModelProvider = ChangeNotifierProvider<LocationViewModel>((
+  ref,
+) {
   return LocationViewModel();
 });
 
@@ -26,6 +32,18 @@ final locationViewModelProvider = ChangeNotifierProvider<LocationViewModel>((ref
 final authViewModelProvider = ChangeNotifierProvider<AuthViewModel>((ref) {
   return AuthViewModel();
 });
+
+// Auth Repository Provider
+final authRepositoryProvider = Provider<AuthRepository>((ref) {
+  return AuthRepositoryImpl();
+});
+
+// Comments Repository Provider
+final commentsRepositoryProvider = Provider<CommentsRepository>((ref) {
+  return CommentsRepositoryImpl();
+});
+
+// Comments ViewModel Provider - removed family, will create directly in widget
 
 // Theme Provider
 final themeControllerProvider = ChangeNotifierProvider<ThemeController>((ref) {
@@ -46,3 +64,8 @@ final loadingProvider = StateProvider<bool>((ref) => false);
 
 // Error State Provider
 final errorProvider = StateProvider<String?>((ref) => null);
+
+final adminUserManagementControllerProvider =
+    ChangeNotifierProvider<AdminUserManagementController>((ref) {
+      return AdminUserManagementController();
+    });

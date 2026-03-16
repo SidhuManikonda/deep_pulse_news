@@ -60,6 +60,31 @@ class AppTheme {
         selectedLabelStyle: GoogleFonts.roboto(fontSize: 12 * fontScale),
         unselectedLabelStyle: GoogleFonts.roboto(fontSize: 12 * fontScale),
       ),
+      inputDecorationTheme: InputDecorationTheme(
+        fillColor: appSurfaceLightColor,
+        filled: true,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(
+            color: appPrimaryLightColor,
+            width: 2,
+          ),
+        ),
+        hintStyle: TextStyle(
+          color: appTextLightLightColor,
+        ),
+        labelStyle: TextStyle(
+          color: appTextSecondaryLightColor,
+        ),
+      ),
     );
   }
 
@@ -143,6 +168,31 @@ class AppTheme {
         type: BottomNavigationBarType.fixed,
         selectedLabelStyle: GoogleFonts.roboto(fontSize: 12 * fontScale),
         unselectedLabelStyle: GoogleFonts.roboto(fontSize: 12 * fontScale),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        fillColor: appSurfaceDarkColor,
+        filled: true,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(
+            color: Colors.white70,
+            width: 2,
+          ),
+        ),
+        hintStyle: TextStyle(
+          color: appTextLightDarkColor,
+        ),
+        labelStyle: TextStyle(
+          color: appTextSecondaryDarkColor,
+        ),
       ),
     );
   }

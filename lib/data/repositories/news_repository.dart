@@ -4,11 +4,13 @@ import '../../core/services/api_service.dart';
 import '../../core/constants/app_constants.dart';
 
 abstract class NewsRepository {
-  Future<List<News>> getNews();
+  Future<List<News>> getNews({String? status, String? userId});
   Future<News?> getNewsById(int id);
   Future<News?> createNews(CreateNewsRequest request);
   Future<News?> updateNews(int id, CreateNewsRequest request);
   Future<bool> deleteNews(int id);
+  Future<bool> updateNewsStatus(int newsId, String status);
+  Future<Map<String, dynamic>> shareNews(int newsId, String platform);
 }
 
 class NewsRepositoryImpl implements NewsRepository {
@@ -17,34 +19,25 @@ class NewsRepositoryImpl implements NewsRepository {
   NewsRepositoryImpl({ApiService? apiService})
     : _apiService = apiService ?? ApiService.instance;
   @override
-  Future<List<News>> getNews() async {
+  Future<List<News>> getNews({String? status, String? userId}) async {
     try {
-      final response = await _apiService.get(AppConstants.news, useAuth: false);
-
-      List<dynamic> newsData;
-
-      // 🔹 CASE 1: Response is a List (your current API)
-      if (response is List) {
-        newsData = response;
+      final queryParams = <String, String>{};
+      if (status != null) {
+        queryParams['status'] = status;
       }
-      // 🔹 CASE 2: Response is a Map
-      else if (response is Map<String, dynamic>) {
-        // Handle error key safely
-        if (response.containsKey('error')) {
-          throw Exception(response['error']);
-        }
-
-        if (response.containsKey('data')) {
-          newsData = response['data'] as List<dynamic>;
-        } else if (response.containsKey('news')) {
-          newsData = response['news'] as List<dynamic>;
-        } else {
-          throw Exception('Unexpected response structure');
-        }
+      if (userId != null) {
+        queryParams['user_id'] = userId;
       }
-      // 🔹 CASE 3: Completely invalid response
-      else {
-        throw Exception('Invalid API response type');
+
+      final response = await _apiService.get(
+        AppConstants.news,
+        queryParameters: queryParams,
+        useAuth: userId != null,
+      );
+
+      List<Map<String, dynamic>> newsData = [];
+      if (response != null) {
+        newsData = List<Map<String, dynamic>>.from(response);
       }
 
       return newsData.map((json) => News.fromJson(json)).toList();
@@ -146,6 +139,45 @@ class NewsRepositoryImpl implements NewsRepository {
       return response.containsKey('success') || response['success'] == true;
     } catch (e) {
       throw Exception('Failed to delete news: $e');
+    }
+  }
+
+  @override
+  Future<bool> updateNewsStatus(int newsId, String status) async {
+    try {
+      final response = await _apiService.put(
+        '${AppConstants.newsStatus}/$newsId',
+        {'status': status},
+        useAuth: true, // Require authentication for status updates
+      );
+
+      if (response.containsKey('error')) {
+        throw Exception(response['error']);
+      }
+
+      // Check for success by looking for message or news data
+      return response.containsKey('message') || response.containsKey('news');
+    } catch (e) {
+      throw Exception('Failed to update news status: $e');
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> shareNews(int newsId, String platform) async {
+    try {
+      final response = await _apiService.post(
+        '${AppConstants.news}/shared',
+        body: {'news_id': newsId, 'platform': platform},
+        useAuth: true, // Require authentication for sharing
+      );
+
+      if (response.containsKey('error')) {
+        throw Exception(response['error']);
+      }
+
+      return response;
+    } catch (e) {
+      throw Exception('Failed to share news: $e');
     }
   }
 }
