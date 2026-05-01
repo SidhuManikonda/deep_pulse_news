@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../data/models/comment.dart';
+import '../../data/models/likeable_type.dart';
 import '../../data/models/news.dart';
 import '../../data/repositories/comments_repository.dart';
 
@@ -33,17 +34,19 @@ class CommentsViewModel extends ChangeNotifier {
   News get news => _news;
   Comment? get replyingToComment => _replyingToComment;
 
-  // Load comments for the news
-  Future<void> loadComments() async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
+  // Load comments for the news.
+  // When silent=true, existing list stays visible (no spinner) — used after posting.
+  Future<void> loadComments({bool silent = false}) async {
+    if (!silent) {
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
+    }
 
     try {
       _comments = await _commentsRepository.getComments(newsId: _news.id);
-      // Removed sorting since createdAt is not available in simplified model
     } catch (e) {
-      _error = e.toString();
+      if (!silent) _error = e.toString();
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -69,6 +72,8 @@ class CommentsViewModel extends ChangeNotifier {
         _comments.insert(0, newComment);
         commentController.clear();
         notifyListeners();
+        // Silent background sync to get server-assigned IDs without showing a spinner.
+        loadComments(silent: true);
         return true;
       }
       return false;
@@ -87,6 +92,77 @@ class CommentsViewModel extends ChangeNotifier {
     await loadComments();
   }
 
+  // Like a comment
+  Future<void> likeComment(Comment comment) async {
+    final wasLiked = comment.isLikedByUser == true;
+    // Toggle: if already liked, remove like; otherwise like
+    if (wasLiked) {
+      comment.likesCount--;
+      comment.isLikedByUser = null;
+    } else {
+      if (comment.isLikedByUser == false) {
+        comment.dislikesCount--;
+      }
+      comment.likesCount++;
+      comment.isLikedByUser = true;
+    }
+    notifyListeners();
+
+    try {
+      await _commentsRepository.likeDislike(
+        likeableId: comment.id,
+        likeableType: LikeableType.comment,
+        isLike: true,
+      );
+    } catch (_) {
+      await loadComments(silent: true);
+    }
+  }
+
+  // Dislike a comment
+  Future<void> dislikeComment(Comment comment) async {
+    final wasDisliked = comment.isLikedByUser == false;
+    if (wasDisliked) {
+      comment.dislikesCount--;
+      comment.isLikedByUser = null;
+    } else {
+      if (comment.isLikedByUser == true) {
+        comment.likesCount--;
+      }
+      comment.dislikesCount++;
+      comment.isLikedByUser = false;
+    }
+    notifyListeners();
+
+    try {
+      await _commentsRepository.likeDislike(
+        likeableId: comment.id,
+        likeableType: LikeableType.comment,
+        isLike: false,
+      );
+    } catch (_) {
+      await loadComments(silent: true);
+    }
+  }
+
+  // Delete a comment
+  Future<bool> deleteComment(int commentId) async {
+    try {
+      final success = await _commentsRepository.deleteComment(commentId: commentId);
+      if (success) {
+        _comments.removeWhere((c) => c.id == commentId);
+        // Also remove from replies
+        for (final comment in _comments) {
+          comment.replies.removeWhere((r) => r.id == commentId);
+        }
+        notifyListeners();
+      }
+      return success;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // Set comment to reply to
   void setReplyingTo(Comment? comment) {
     _replyingToComment = comment;
@@ -99,16 +175,11 @@ class CommentsViewModel extends ChangeNotifier {
   // Post a reply to a comment
   Future<bool> postReply() async {
     final content = replyController.text.trim();
-    print('postReply called with content: "$content", replyingTo: ${_replyingToComment?.userName}');
-    if (content.isEmpty || _replyingToComment == null) {
-      print('postReply: content empty or no replyingToComment');
-      return false;
-    }
+    if (content.isEmpty || _replyingToComment == null) return false;
 
     _isReplying = true;
     _error = null;
     notifyListeners();
-    print('postReply: starting API call');
 
     try {
       final newReply = await _commentsRepository.replyComment(
@@ -116,10 +187,8 @@ class CommentsViewModel extends ChangeNotifier {
         parentId: _replyingToComment!.id,
         comment: content,
       );
-      print('postReply: API call completed, newReply: $newReply');
 
       if (newReply != null) {
-        // Find the parent comment and add the reply to its replies list
         final parentIndex = _comments.indexWhere((comment) => comment.id == _replyingToComment!.id);
         if (parentIndex != -1) {
           _comments[parentIndex].replies.insert(0, newReply);
@@ -127,20 +196,16 @@ class CommentsViewModel extends ChangeNotifier {
         replyController.clear();
         _replyingToComment = null;
         notifyListeners();
-        print('postReply: success');
         return true;
       }
-      print('postReply: API returned null');
       return false;
     } catch (e) {
-      print('postReply: error - $e');
       _error = e.toString();
       notifyListeners();
       return false;
     } finally {
       _isReplying = false;
       notifyListeners();
-      print('postReply: finished');
     }
   }
 

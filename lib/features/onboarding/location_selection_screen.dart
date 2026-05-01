@@ -40,7 +40,7 @@ class _LocationSelectionScreenState
               const SizedBox(height: 40),
 
               // Title and description
-              AutoScaledText(
+              Text(
                 'Select Location',
                 style: TextStyle(
                   fontSize: appFontSizeTitle,
@@ -50,7 +50,7 @@ class _LocationSelectionScreenState
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
-              AutoScaledText(
+              Text(
                 'Choose your State, District, and Mandal to get localized news content',
                 style: TextStyle(
                   fontSize: appFontSizeSubHeader,
@@ -73,7 +73,7 @@ class _LocationSelectionScreenState
               const SizedBox(height: 16),
 
               // Info text
-              AutoScaledText(
+              Text(
                 'You will select your location in 3 simple steps',
                 style: TextStyle(fontSize: appFontSizeBody, color: Colors.grey[600]),
                 textAlign: TextAlign.center,

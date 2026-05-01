@@ -6,7 +6,7 @@ extension AppColorsExtension on ThemeData {
   bool get _isLight => brightness == Brightness.light;
 
   // Primary Colors (same for both themes)
-  Color get appPrimary => const Color(0xFFE53E3E);
+  Color get appPrimary => const Color(0xFFC62828);
   Color get appPrimaryDark => const Color(0xFFC53030);
   Color get appPrimaryLight => const Color(0xFFFC8181);
 
@@ -163,3 +163,11 @@ const Color appTechnologyColor = Color(0xFF00B5D8);
 const Color appBusinessColor = Color(0xFFD69E2E);
 const Color appHealthColor = Color(0xFFFF6B6B);
 const Color appLifestyleColor = Color(0xFFED8936);
+
+//------------------------------------------------------------------------------
+// Semantic Alert Colors (always on dark/colored backgrounds — not theme-aware)
+//------------------------------------------------------------------------------
+const Color appAlertSuccessColor = Color(0xFF16A34A);
+const Color appAlertErrorColor   = Color(0xFFDC2626);
+const Color appAlertWarningColor  = Color(0xFFD97706);
+const Color appAlertInfoColor     = Color(0xFF2563EB);

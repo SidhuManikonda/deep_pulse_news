@@ -18,7 +18,7 @@ class DistrictRepositoryImpl implements DistrictRepository {
   @override
   Future<List<District>> getDistrictsByState(int stateId) async {
     try {
-      final response = await _apiService.get('${AppConstants.districts}/$stateId', useAuth: false);
+      final response = await _apiService.get('${AppConstants.districts}/$stateId', useAuth: false, showErrorAlert: false);
 
       if (response.containsKey('error')) {
         throw Exception(response['error']);
@@ -69,7 +69,7 @@ class DistrictRepositoryImpl implements DistrictRepository {
       final response = await _apiService.post(
         AppConstants.districts,
         body: requestBody,
-        useAuth: false,
+        useAuth: true,
       );
 
       if (response.containsKey('error')) {
@@ -98,7 +98,7 @@ class DistrictRepositoryImpl implements DistrictRepository {
       final response = await _apiService.put(
         '${AppConstants.districts}/$id',
         requestBody,
-        useAuth: false,
+        useAuth: true,
       );
 
       if (response.containsKey('error')) {

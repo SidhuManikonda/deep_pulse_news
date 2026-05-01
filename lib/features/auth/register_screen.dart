@@ -9,6 +9,7 @@ import '../../shared/widgets/custom_button.dart';
 import '../../shared/widgets/custom_text_field.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/app_providers.dart';
+import '../../core/constants/app_font_sizes.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
@@ -103,7 +104,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   Text(
                     'Create Account',
                     style: TextStyle(
-                      fontSize: 28,
+                      fontSize: scaledFontSize(28),
                       fontWeight: FontWeight.bold,
                       color: Theme.of(context).textTheme.headlineLarge?.color,
                     ),

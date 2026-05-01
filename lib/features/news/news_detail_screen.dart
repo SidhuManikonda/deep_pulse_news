@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_font_sizes.dart';
-import '../../shared/widgets/auto_scaled_text.dart';
 import '../../data/models/news.dart';
 import '../../data/repositories/news_repository.dart';
 import '../comments/comments_screen.dart';
@@ -104,17 +103,17 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Title
-                  AutoScaledText(
+                  Text(
                     _getNewsTitle(),
                     style: TextStyle(
-                      fontSize: 19,
+                      fontSize: scaledFontSize(23),
                       fontWeight: FontWeight.bold,
                       color: Theme.of(context).textTheme.headlineLarge?.color,
                       height: 1.3,
                     ),
                   ),
 
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
 
                   // Meta info
                   Row(
@@ -125,10 +124,10 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
                         color: Theme.of(context).appGrey600,
                       ),
                       const SizedBox(width: 4),
-                      AutoScaledText(
+                      Text(
                         _formatTimestamp(_newsItem.createdAt),
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: scaledFontSize(13),
                           color: Theme.of(context).appGrey600,
                         ),
                       ),
@@ -139,27 +138,42 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
                         color: Theme.of(context).appGrey600,
                       ),
                       const SizedBox(width: 4),
-                      AutoScaledText(
+                      Text(
                         '${_newsItem.viewsCount} views',
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: scaledFontSize(13),
                           color: Theme.of(context).appGrey600,
                         ),
                       ),
                     ],
                   ),
 
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
+
+                  // Short description
+                  if (_getNewsShortDescription().isNotEmpty) ...[
+                    Text(
+                      _getNewsShortDescription(),
+                      style: TextStyle(
+                        fontSize: scaledFontSize(22.0),
+                        color: Theme.of(context).textTheme.bodyLarge?.color,
+                        height: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
 
                   // Full content
-                  AutoScaledText(
-                    _getNewsContent(),
-                    style: TextStyle(
-                      fontSize: 18.0,
-                      color: Theme.of(context).textTheme.bodyLarge?.color,
-                      height: 1.6,
+                  if (_getNewsContent().isNotEmpty &&
+                      _getNewsContent() != _getNewsShortDescription())
+                    Text(
+                      _getNewsContent(),
+                      style: TextStyle(
+                        fontSize: scaledFontSize(22.0),
+                        color: Theme.of(context).textTheme.bodyLarge?.color,
+                        height: 1.5,
+                      ),
                     ),
-                  ),
 
                   const SizedBox(height: 24),
 
@@ -235,10 +249,10 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
                       color: Colors.black.withOpacity(0.6),
                       borderRadius: BorderRadius.circular(16),
                     ),
-                    child: AutoScaledText(
+                    child: Text(
                       _formatTimestamp(_newsItem.createdAt),
-                      style: const TextStyle(
-                        fontSize: 12,
+                      style:  TextStyle(
+                        fontSize: scaledFontSize(12),
                         color: Colors.white,
                         fontWeight: FontWeight.w500,
                       ),
@@ -272,10 +286,10 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
                           ),
                         ),
                         const SizedBox(width: 4),
-                        AutoScaledText(
+                        Text(
                           'Deep Pulse',
-                          style: const TextStyle(
-                            fontSize: 10,
+                          style:  TextStyle(
+                            fontSize: scaledFontSize(10),
                             color: Colors.white,
                             fontWeight: FontWeight.w600,
                           ),
@@ -352,10 +366,10 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
                     color: Colors.black.withOpacity(0.6),
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: AutoScaledText(
+                  child: Text(
                     '${currentCarouselPage + 1}/$mediaCount',
-                    style: const TextStyle(
-                      fontSize: 12,
+                    style:  TextStyle(
+                      fontSize: scaledFontSize(12),
                       color: Colors.white,
                       fontWeight: FontWeight.w500,
                     ),
@@ -375,10 +389,10 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
                     color: Colors.black.withOpacity(0.6),
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: AutoScaledText(
+                  child: Text(
                     _formatTimestamp(_newsItem.createdAt),
-                    style: const TextStyle(
-                      fontSize: 12,
+                    style:  TextStyle(
+                      fontSize: scaledFontSize(12),
                       color: Colors.white,
                       fontWeight: FontWeight.w500,
                     ),
@@ -412,10 +426,10 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
                         ),
                       ),
                       const SizedBox(width: 4),
-                      AutoScaledText(
+                      Text(
                         'Deep Pulse',
-                        style: const TextStyle(
-                          fontSize: 10,
+                        style:  TextStyle(
+                          fontSize: scaledFontSize(10),
                           color: Colors.white,
                           fontWeight: FontWeight.w600,
                         ),
@@ -512,7 +526,7 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
           Icon(icon, size: 24, color: iconColor),
           if (count.isNotEmpty) ...[
             const SizedBox(height: 4),
-            AutoScaledText(
+            Text(
               count,
               style: TextStyle(
                 fontSize: appFontSizeCaption,
@@ -529,7 +543,7 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        AutoScaledText(
+        Text(
           'Related News',
           style: TextStyle(
             fontSize: appFontSizeHeader,
@@ -566,7 +580,7 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      AutoScaledText(
+                      Text(
                         'Related News Title ${index + 1}',
                         style: TextStyle(
                           fontSize: appFontSizeBody,
@@ -577,7 +591,7 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 4),
-                      AutoScaledText(
+                      Text(
                         '1 hour ago',
                         style: TextStyle(
                           fontSize: appFontSizeCaption,
@@ -603,11 +617,18 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
     return 'No title available';
   }
 
+  String _getNewsShortDescription() {
+    if (_newsItem.translations.isNotEmpty) {
+      return _newsItem.translations.first.shortDescription;
+    }
+    return '';
+  }
+
   String _getNewsContent() {
     if (_newsItem.translations.isNotEmpty) {
       return _newsItem.translations.first.content;
     }
-    return 'No content available';
+    return '';
   }
 
   String _formatTimestamp(DateTime timestamp) {

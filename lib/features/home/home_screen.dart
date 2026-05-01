@@ -1,27 +1,35 @@
-import '../news/fullscreen_video_screen.dart';
+import 'package:deep_pulse_news/features/home/more_topics_screen.dart';
 import 'package:deep_pulse_news/features/profile/profile_screen.dart';
 import 'package:deep_pulse_news/providers/app_providers.dart';
 import 'package:deep_pulse_news/shared/widgets/video_player_widget.dart';
 import 'package:flutter/material.dart';
-import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
-import '../../core/services/video_preloader_service.dart';
-import '../../shared/widgets/cached_image_widget.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/constants/app_radius.dart';
+import '../../core/constants/app_shadows.dart';
+import '../../core/constants/app_spacing.dart';
+import '../../core/services/news_view_tracker_service.dart';
 import '../../core/constants/app_font_sizes.dart';
+import '../../core/services/saved_news_service.dart';
+import '../../core/services/video_preloader_service.dart';
 import '../../data/models/likeable_type.dart';
 import '../../data/models/news.dart';
+import '../../data/repositories/auth_repository.dart';
 import '../../data/models/topic.dart';
 import '../../extensions/user_extensions.dart';
-import '../../shared/widgets/auto_scaled_text.dart';
+import '../../shared/widgets/cached_image_widget.dart';
+import '../../shared/widgets/report_bottom_sheet.dart';
 import '../auth/auth_helper.dart';
 import '../comments/comments_screen.dart';
-import '../news/news_detail_screen.dart';
+import '../news/fullscreen_video_screen.dart';
+import '../news/news_detail_screen_v2.dart';
 import '../news/news_upload_screen.dart';
 import '../notifications/notifications_screen.dart';
 import '../settings/settings_screen.dart';
+import '../../shared/widgets/app_logo.dart';
 import 'home_view_model.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -33,11 +41,12 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   final _videoPreloader = VideoPreloaderService();
+  final _newsViewTracker = NewsViewTrackerService();
   final PageController _pageController = PageController();
   int _currentPage = 0;
+  bool _firstPageTracked = false;
   final Map<int, int> _currentCarouselPages =
       {}; // Track carousel page per news item
-
   @override
   void dispose() {
     _pageController.dispose();
@@ -49,52 +58,66 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     super.initState();
     // Initialize the view model and auth state lazily when entering home screen
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await ref.read(authViewModelProvider).initializeAuth();
-      await ref.read(homeViewModelProvider).initialize();
+      // Run auth and home init in parallel — home doesn't need to wait for auth.
+      // After auth settles, silently reload news so per-user like status is correct.
+      await Future.wait([
+        ref.read(authViewModelProvider).initializeAuth(),
+        ref.read(homeViewModelProvider).initialize(),
+      ]);
+      if (ref.read(authViewModelProvider).user != null) {
+        ref.read(homeViewModelProvider).loadNewsData(silent: true);
+      }
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Header with logo and profile
-            _buildHeader(context),
+    return SafeArea(
+      top: false,
+      left: false,
+      right: false,
+      bottom: true,
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        body: SafeArea(
+          child: Column(
+            children: [
+              // Header with logo and profile
+              _buildHeader(context),
 
-            // Location tabs - fixed position with horizontal scrolling
-            _buildLocationTabs(context),
+              // Location tabs - fixed position with horizontal scrolling
+              _buildLocationTabs(context),
 
-            // Main content area - News feed only
-            Expanded(
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 300),
-                transitionBuilder: (Widget child, Animation<double> animation) {
-                  final slideAnimation =
-                      Tween<Offset>(
-                        begin: const Offset(0.1, 0.0),
-                        end: Offset.zero,
-                      ).animate(
-                        CurvedAnimation(
-                          parent: animation,
-                          curve: Curves.easeInOut,
-                        ),
-                      );
+              // Main content area - News feed only
+              Expanded(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  transitionBuilder:
+                      (Widget child, Animation<double> animation) {
+                        final slideAnimation =
+                            Tween<Offset>(
+                              begin: const Offset(0.1, 0.0),
+                              end: Offset.zero,
+                            ).animate(
+                              CurvedAnimation(
+                                parent: animation,
+                                curve: Curves.easeInOut,
+                              ),
+                            );
 
-                  return SlideTransition(
-                    position: slideAnimation,
-                    child: child,
-                  );
-                },
-                child: _buildNewsFeed(context),
+                        return SlideTransition(
+                          position: slideAnimation,
+                          child: child,
+                        );
+                      },
+                  child: _buildNewsFeed(context),
+                ),
               ),
-            ),
 
-            // Bottom navigation
-            _buildBottomNavigation(context),
-          ],
+              // Bottom navigation
+              _buildBottomNavigation(context),
+            ],
+          ),
         ),
       ),
     );
@@ -102,25 +125,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Widget _buildHeader(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.xs),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           // Logo
           Row(
             children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: Theme.of(context).appPrimary,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(Icons.newspaper, size: 20, color: Colors.white),
-              ),
+              AppLogo(size: 36, borderRadius: 8),
               const SizedBox(width: 8),
-              AutoScaledText(
-                'Deep Pulse News',
+              Text(
+                'Deep Pulse',
                 style: TextStyle(
                   fontSize: appFontSizeHeader,
                   fontWeight: FontWeight.bold,
@@ -161,79 +176,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildUserProfileHeader(BuildContext context, News newsItem) {
-    // Format the timestamp
-    final timeAgo = _getTimeAgo(newsItem.createdAt);
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          // Profile avatar
-          CircleAvatar(
-            radius: 20,
-            backgroundColor: Theme.of(context).appPrimary.withOpacity(0.1),
-            child: Icon(
-              Icons.person,
-              color: Theme.of(context).appPrimary,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 12),
-
-          // Name and details
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'News Reporter', // You can replace this with actual author name from newsItem
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Theme.of(context).textTheme.bodyLarge?.color,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Deep Pulse News • $timeAgo',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                    fontWeight: FontWeight.w400,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // More options button
-          IconButton(
-            onPressed: () {
-              // Add more options functionality
-            },
-            icon: Icon(Icons.more_vert, color: Colors.grey[600], size: 20),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _getTimeAgo(DateTime dateTime) {
-    final now = DateTime.now();
-    final difference = now.difference(dateTime);
-
-    if (difference.inDays > 0) {
-      return '${difference.inDays}d';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours}h';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}m';
-    } else {
-      return 'now';
-    }
-  }
-
   Widget _buildLocationTabs(BuildContext context) {
     final homeViewModel = ref.watch(homeViewModelProvider);
     final tabs = homeViewModel.getLocationTabs();
@@ -261,13 +203,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    AutoScaledText(
+                    Text(
                       displayName,
                       textAlign: TextAlign.center,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: appFontSizeSubHeader,
+                        fontSize: scaledFontSize(15),
                         color: isSelected
                             ? Theme.of(context).appPrimary
                             : Theme.of(context).textTheme.bodyLarge?.color,
@@ -299,7 +241,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     // Show topics grid for More tab
     if (homeViewModel.selectedLocationTab == 'More') {
-      return _buildTopicsGrid(context);
+      return MoreTopicsWidget();
     }
 
     if (homeViewModel.isLoadingNews) {
@@ -311,7 +253,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            AutoScaledText(
+            Text(
               'Error loading news',
               style: TextStyle(
                 fontSize: appFontSizeBody,
@@ -332,7 +274,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     if (newsItems.isEmpty) {
       return Center(
-        child: AutoScaledText(
+        child: Text(
           'No news available for ${homeViewModel.selectedLocationTab}',
           style: TextStyle(
             fontSize: appFontSizeBody,
@@ -356,11 +298,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           setState(() {
             _currentPage = index;
           });
+          // Load more news when near the end
+          if (index >= newsItems.length - 3) {
+            ref.read(homeViewModelProvider).loadMoreNews();
+          }
           _preloadAdjacentVideos(newsItems, index);
+          // Track news view and increment count locally
+          // if (index < newsItems.length) {
+          //   final userId = ref.read(authViewModelProvider).user?.id;
+          //   if (userId != null) {
+          //     _newsViewTracker.recordView(newsItems[index].id, userId: userId);
+          //   }
+          //   ref.read(homeViewModelProvider).incrementViewCount(newsItems[index].id);
+          // }
         },
         itemBuilder: (context, index) {
-          if (index == 0) {
+          if (index == 0 && !_firstPageTracked) {
+            _firstPageTracked = true;
             _preloadAdjacentVideos(newsItems, index);
+            // final userId = ref.read(authViewModelProvider).user?.id;
+            // if (userId != null) {
+            //   _newsViewTracker.recordView(newsItems[0].id, userId: userId);
+            // }
+            // ref.read(homeViewModelProvider).incrementViewCount(newsItems[0].id);
           }
           return _buildNewsCard(
             context,
@@ -385,7 +345,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            AutoScaledText(
+            Text(
               'Error loading topics',
               style: TextStyle(
                 fontSize: appFontSizeBody,
@@ -394,7 +354,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             const SizedBox(height: 8),
             ElevatedButton(
-              onPressed: () => ref.read(topicViewModelProvider).loadTopics(),
+              onPressed: () => ref.read(homeViewModelProvider).loadTopicsData(),
               child: const Text('Retry'),
             ),
           ],
@@ -406,7 +366,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     if (topics.isEmpty) {
       return Center(
-        child: AutoScaledText(
+        child: Text(
           'No topics available',
           style: TextStyle(
             fontSize: appFontSizeBody,
@@ -418,50 +378,68 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     return RefreshIndicator(
       onRefresh: () => ref.read(homeViewModelProvider).loadTopicsData(),
-      child: ListView.builder(
+      child: GridView.builder(
         padding: const EdgeInsets.all(16),
         itemCount: topics.length,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2, // 👈 2 columns
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          childAspectRatio: 1.2,
+        ),
         itemBuilder: (context, index) {
           final topic = topics[index];
 
           return InkWell(
-            focusColor: Colors.transparent,
-            hoverColor: Colors.transparent,
-            splashColor: Colors.transparent,
-            highlightColor: Colors.transparent,
+            borderRadius: BorderRadius.circular(16),
             onTap: () => _onTopicTap(context, topic),
             child: Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: Theme.of(context).appCard,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.05),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.03),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
                   ),
                 ],
               ),
-              child: AutoScaledText(
-                topic.name,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Theme.of(context).appTextPrimary,
-                ),
-                textAlign: TextAlign.center,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // 🔹 Icon (random color circle)
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).appPrimary.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.category,
+                      color: Theme.of(context).appPrimary,
+                      size: 28,
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // 🔹 Topic Name
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Text(
+                      topic.name,
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: scaledFontSize(14),
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(context).appTextPrimary,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           );
@@ -487,14 +465,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         margin: const EdgeInsets.only(top: 8, left: 8, right: 8, bottom: 8),
         decoration: BoxDecoration(
           color: Theme.of(context).appCard,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
+          borderRadius: AppRadius.mdAll,
+          boxShadow: Theme.of(context).shadowMd,
         ),
         child: Stack(
           children: [
@@ -506,14 +478,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 // Text content section - takes remaining space
                 Expanded(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 72),
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 50),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        AutoScaledText(
+                        Text(
                           _getNewsTitle(newsItem),
                           style: TextStyle(
-                            fontSize: 19,
+                            fontSize: scaledFontSize(20),
                             fontWeight: FontWeight.bold,
                             color: Theme.of(context).appTextPrimary,
                           ),
@@ -521,10 +493,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 4),
-                        _buildDescriptionWithReadMore(
-                          context,
-                          _getNewsDescription(newsItem),
-                          newsItem,
+                        Expanded(
+                          child: _buildDescriptionWithReadMore(
+                            context,
+                            _getNewsDescription(newsItem),
+                            newsItem,
+                          ),
                         ),
                       ],
                     ),
@@ -536,7 +510,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             Positioned(
               left: 0,
               right: 0,
-              bottom: 0,
+              bottom: -12,
               child: _buildNewInteractionBar(context, newsItem),
             ),
           ],
@@ -551,7 +525,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     bool isVisible,
     int newsItemIndex,
   ) {
-    final mediaItems = newsItem.media.take(3).toList();
+    final mediaItems = newsItem.media.toList();
     final mediaCount = mediaItems.length;
 
     if (mediaCount == 0) {
@@ -561,141 +535,127 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     if (mediaCount == 1) {
       // Single media item
       final media = mediaItems[0];
+      final screenHeight = MediaQuery.of(context).size.height;
       return SizedBox(
         width: double.infinity,
-        child: AspectRatio(
-          aspectRatio: 4 / 3,
-          child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 0),
-            decoration: BoxDecoration(
-              color: Theme.of(context).appGrey200,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Stack(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: SizedBox.expand(
-                    child: media.type == 'video'
-                        ? VideoPlayerWidget(
-                            videoUrl: media.fileUrl,
-                            autoPlay: false,
-                            isVisible: isVisible,
-                          )
-                        : CachedImageWidget(
-                            imageUrl: media.fileUrl,
-                            fit: BoxFit.contain,
-                            errorWidget: Container(
-                              color: Theme.of(context).appGrey200,
-                              child: Center(
-                                child: Icon(
-                                  Icons.image,
-                                  size: 64,
-                                  color: Theme.of(context).appGrey400,
-                                ),
+        height: screenHeight * 0.28,
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 0),
+          decoration: BoxDecoration(
+            color: Theme.of(context).appGrey200,
+            borderRadius: AppRadius.smAll,
+          ),
+          child: Stack(
+            children: [
+              ClipRRect(
+                borderRadius: AppRadius.smAll,
+                child: SizedBox.expand(
+                  child: media.type == 'video'
+                      ? VideoPlayerWidget(
+                          videoUrl: media.fileUrl,
+                          autoPlay: false,
+                          isVisible: isVisible,
+                        )
+                      : CachedImageWidget(
+                          imageUrl: media.fileUrl,
+                          fit: BoxFit.cover,
+                          errorWidget: Container(
+                            color: Theme.of(context).appGrey200,
+                            child: Center(
+                              child: Icon(
+                                Icons.image,
+                                size: 64,
+                                color: Theme.of(context).appGrey400,
                               ),
                             ),
                           ),
+                        ),
+                ),
+              ),
+              // Timestamp overlay at bottom left
+              Positioned(
+                bottom: 8,
+                left: 12,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.4),
+                    borderRadius: AppRadius.smAll,
+                  ),
+                  child: Text(
+                    newsItem.authorName!=null?'${newsItem.authorName}':'',
+                    style: TextStyle(
+                      fontSize: scaledFontSize(12),
+                      color: Colors.white,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
-                // Timestamp overlay at bottom left
-                Positioned(
-                  bottom: 12,
-                  left: 12,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.6),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: AutoScaledText(
-                      _formatTimestamp(newsItem.createdAt),
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.white,
-                        fontWeight: FontWeight.w500,
+              ),
+              // App logo/name overlay at bottom right (small and subtle)
+              Positioned(
+                bottom: 8,
+                right: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.4),
+                    borderRadius: AppRadius.smAll,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      AppLogo(size: 16, borderRadius: 4),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Deep Pulse',
+                        style: TextStyle(
+                          fontSize: scaledFontSize(10),
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
-                // App logo/name overlay at bottom right (small and subtle)
-                Positioned(
-                  bottom: 8,
-                  right: 8,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.4),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 12,
-                          height: 12,
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).appPrimary,
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                          child: Icon(
-                            Icons.newspaper,
-                            size: 8,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        AutoScaledText(
-                          'Deep Pulse',
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+              ),
+              if (media.type == 'video')
                 Positioned(
                   top: 10,
                   left: 10,
                   child: InkWell(
-                    onTap: media.type == 'video'
-                        ? () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (context) => FullscreenVideoScreen(
-                                  videoUrl: media.fileUrl,
-                                  title: _getNewsTitle(newsItem),
-                                  createdAt: newsItem.createdAt,
-                                ),
-                              ),
-                            );
-                          }
-                        : null,
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => FullscreenVideoScreen(
+                            videoUrl: media.fileUrl,
+                            title: _getNewsTitle(newsItem),
+                            createdAt: newsItem.createdAt,
+                          ),
+                        ),
+                      );
+                    },
                     child: Container(
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
                         color: Colors.black.withOpacity(0.6),
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: AppRadius.xsAll,
                       ),
-                      child: Icon(
-                        Icons.close_fullscreen,
-                        color: media.type == 'video' ? Colors.white : Colors.white.withOpacity(0.3),
+                      child: const Icon(
+                        Icons.fullscreen,
+                        color: Colors.white,
                         size: 22,
                       ),
                     ),
                   ),
                 ),
-              ],
-            ),
+            ],
           ),
         ),
       );
@@ -705,11 +665,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
       return SizedBox(
         width: double.infinity,
-        height: 200, // Fixed height for carousel instead of aspect ratio
+        height: MediaQuery.of(context).size.height * 0.28,
         child: Stack(
           children: [
             ClipRRect(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: AppRadius.smAll,
               child: PageView.builder(
                 itemCount: mediaCount,
                 onPageChanged: (page) {
@@ -733,7 +693,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           )
                         : CachedImageWidget(
                             imageUrl: media.fileUrl,
-                            fit: BoxFit.contain,
+                            fit: BoxFit.cover,
                             errorWidget: Container(
                               color: Theme.of(context).appGrey200,
                               child: Center(
@@ -749,52 +709,53 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 },
               ),
             ),
-            // Media counter indicator
+            // Page indicators (dots)
             Positioned(
-              top: 12,
-              right: 12,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.6),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: AutoScaledText(
-                  '${currentCarouselPage + 1}/$mediaCount',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Colors.white,
-                    fontWeight: FontWeight.w500,
+              bottom: 10,
+              left: 0,
+              right: 0,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(
+                  mediaCount,
+                  (index) => AnimatedContainer(
+                    duration: const Duration(milliseconds: 250),
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    width: index == currentCarouselPage ? 24 : 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: index == currentCarouselPage
+                          ? Colors.white
+                          : Colors.white.withOpacity(0.4),
+                      borderRadius: AppRadius.xsAll,
+                    ),
                   ),
                 ),
               ),
             ),
             // Timestamp overlay at bottom left
-            Positioned(
-              bottom: 12,
-              left: 12,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.6),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: AutoScaledText(
-                  _formatTimestamp(newsItem.createdAt),
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Colors.white,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ),
+            // Positioned(
+            //   bottom: 12,
+            //   left: 12,
+            //   child: Container(
+            //     padding: const EdgeInsets.symmetric(
+            //       horizontal: 10,
+            //       vertical: 6,
+            //     ),
+            //     decoration: BoxDecoration(
+            //       color: Colors.black.withOpacity(0.6),
+            //       borderRadius: BorderRadius.circular(16),
+            //     ),
+            //     child: Text(
+            //       _formatTimestamp(newsItem.createdAt),
+            //       style: TextStyle(
+            //         fontSize: scaledFontSize(12),
+            //         color: Colors.white,
+            //         fontWeight: FontWeight.w500,
+            //       ),
+            //     ),
+            //   ),
+            // ),
             // App logo/name overlay at bottom right (small and subtle)
             Positioned(
               bottom: 8,
@@ -803,29 +764,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                 decoration: BoxDecoration(
                   color: Colors.black.withOpacity(0.4),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: AppRadius.smAll,
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Container(
-                      width: 12,
-                      height: 12,
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).appPrimary,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                      child: Icon(
-                        Icons.newspaper,
-                        size: 8,
-                        color: Colors.white,
-                      ),
-                    ),
+                    AppLogo(size: 16, borderRadius: 4),
                     const SizedBox(width: 4),
-                    AutoScaledText(
+                    Text(
                       'Deep Pulse',
-                      style: const TextStyle(
-                        fontSize: 10,
+                      style: TextStyle(
+                        fontSize: scaledFontSize(10),
                         color: Colors.white,
                         fontWeight: FontWeight.w600,
                       ),
@@ -835,14 +784,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
             ),
 
-            // FULLSCREEN ICON
-            Positioned(
-              top: 10,
-              left: 10,
-              child: InkWell(
-                onTap: () {
-                  final currentMedia = mediaItems[currentCarouselPage];
-                  if (currentMedia.type == 'video') {
+            // FULLSCREEN ICON (only for videos)
+            if (mediaItems[currentCarouselPage].type == 'video')
+              Positioned(
+                top: 10,
+                left: 10,
+                child: InkWell(
+                  onTap: () {
+                    final currentMedia = mediaItems[currentCarouselPage];
                     Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (context) => FullscreenVideoScreen(
@@ -852,24 +801,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         ),
                       ),
                     );
-                  }
-                },
-                child: Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.6),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Icon(
-                    Icons.close_fullscreen,
-                    color: mediaItems.isNotEmpty && mediaItems[currentCarouselPage].type == 'video'
-                        ? Colors.white
-                        : Colors.white.withValues(alpha: 0.3),
-                    size: 22,
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.6),
+                      borderRadius: AppRadius.xsAll,
+                    ),
+                    child: const Icon(
+                      Icons.fullscreen,
+                      color: Colors.white,
+                      size: 22,
+                    ),
                   ),
                 ),
               ),
-            ),
           ],
         ),
       );
@@ -881,51 +827,107 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     String description,
     News newsItem,
   ) {
+    final baseFontSize = scaledFontSize(18);
+
     return LayoutBuilder(
       builder: (context, constraints) {
+        final availableHeight = constraints.maxHeight;
+        final readMoreBtnHeight = appFontSizeBody * 1.4 + 12;
+
         final textStyle = TextStyle(
-          fontSize: 18.0,
+          fontSize: baseFontSize,
+          fontFamily: GoogleFonts.roboto().fontFamily,
           color: Theme.of(context).textTheme.bodyLarge?.color,
           height: 1.4,
         );
 
-        final textSpan = TextSpan(text: description, style: textStyle);
-        final textPainter = TextPainter(
-          text: textSpan,
+        // Measure with unlimited lines to get actual line height
+        final singleLinePainter = TextPainter(
+          text: TextSpan(text: 'A', style: textStyle),
           textDirection: TextDirection.ltr,
-          maxLines: 8,
-        );
+          maxLines: 1,
+        )..layout(maxWidth: constraints.maxWidth);
+        final actualLineHeight = singleLinePainter.height;
 
-        textPainter.layout(maxWidth: constraints.maxWidth);
-        final isTextOverflowing = textPainter.didExceedMaxLines;
+        // How many lines fit without / with "Read More"
+        final maxLinesFull = (availableHeight / actualLineHeight).floor().clamp(
+          1,
+          999,
+        );
+        final maxLinesWithBtn =
+            ((availableHeight - readMoreBtnHeight) / actualLineHeight)
+                .floor()
+                .clamp(1, 999);
+
+        // Check if text overflows the available space
+        final fullTextPainter = TextPainter(
+          text: TextSpan(text: description, style: textStyle),
+          textDirection: TextDirection.ltr,
+        )..layout(maxWidth: constraints.maxWidth);
+
+        final isOverflowing = fullTextPainter.height > availableHeight;
+        final effectiveMaxLines = isOverflowing
+            ? maxLinesWithBtn
+            : maxLinesFull;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            AutoScaledText(
-              description,
-              style: textStyle,
-              maxLines: 8,
-              overflow: TextOverflow.ellipsis,
-            ),
-            if (isTextOverflowing) ...[
-              const SizedBox(height: 4),
-              InkWell(
-                onTap: () {
-                  // Pause all videos before navigating
-                  _videoPreloader.pauseAllVideos();
-                  _navigateToNewsDetail(context, newsItem);
-                },
-                child: AutoScaledText(
-                  'Read More',
+            Expanded(
+              child: ClipRect(
+                child: Text(
+                  description,
                   style: TextStyle(
-                    fontSize: appFontSizeBody,
-                    color: Theme.of(context).appPrimary,
-                    fontWeight: FontWeight.w600,
+                    fontSize: baseFontSize,
+                    color: Theme.of(context).textTheme.bodyLarge?.color,
+                    height: 1.4,
                   ),
+                  maxLines: effectiveMaxLines,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-            ],
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top:8.0,bottom: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.access_time_filled,
+                        size: 14,
+                        color: Theme.of(context).appGrey600,
+                      ),
+                      Text(
+                        _formatTimestamp(newsItem.createdAt),
+                        style: TextStyle(
+                          fontSize: scaledFontSize(12),
+                          color: Theme.of(context).appGrey600,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+              
+                  if (isOverflowing)
+                    InkWell(
+                      onTap: () {
+                        _videoPreloader.pauseAllVideos();
+                        _navigateToNewsDetail(context, newsItem);
+                      },
+                      child: Text(
+                        'Read More',
+                        style: TextStyle(
+                          fontSize: appFontSizeBody,
+                          color: Theme.of(context).appPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ],
         );
       },
@@ -936,7 +938,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => NewsDetailScreen(
+        builder: (context) => NewsDetailScreenV2(
           initialNewsItem: newsItem,
           onCommentPosted: () {
             ref.read(homeViewModelProvider).refresh();
@@ -967,97 +969,113 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // Like symbol
-                  Consumer(
-                    builder: (context, ref, child) {
-                      final isLiked = newsItem.isLiked == 1;
-                      final likeColor = isLiked
-                          ? Colors.blue
-                          : Theme.of(context).appGrey600;
-                      return _buildIconButton(
-                        context,
-                        Icons.thumb_up_outlined,
-                        () async {
-                          try {
-                            await ref
-                                .read(homeViewModelProvider)
-                                .likeDislike(
-                                  likeableId: newsItem.id,
-                                  likeableType: LikeableType.news,
-                                  isLike: true,
-                                );
-                          } catch (e) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Failed to like: $e')),
-                            );
-                          }
-                        },
-                        likeColor,
-                      );
-                    },
-                  ),
-                  // Dislike symbol
+                  // Like & Dislike — single Consumer for both
                   Consumer(
                     builder: (context, ref, child) {
                       final homeViewModel = ref.watch(homeViewModelProvider);
+                      final item = homeViewModel.newsItems.firstWhere(
+                        (n) => n.id == newsItem.id,
+                        orElse: () => newsItem,
+                      );
                       final likeStatus =
                           homeViewModel.likeStatuses[newsItem.id] ??
                           LikeStatus.neutral;
-                      final dislikeColor = likeStatus == LikeStatus.disliked
-                          ? Colors.red
-                          : Theme.of(context).appGrey600;
-                      return _buildIconButton(
-                        context,
-                        Icons.thumb_down_outlined,
-                        () async {
-                          try {
-                            await ref
-                                .read(homeViewModelProvider)
-                                .likeDislike(
-                                  likeableId: newsItem.id,
-                                  likeableType: LikeableType.news,
-                                  isLike: false,
-                                );
-                          } catch (e) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Failed to dislike: $e')),
-                            );
-                          }
-                        },
-                        dislikeColor,
-                      );
-                    },
-                  ),
-                  // Comments count
-                  _buildIconWithCount(
-                    context,
-                    Icons.comment_outlined,
-                    newsItem.commentsCount.toString(),
-                    () async {
-                      _videoPreloader.pauseAllVideos();
-                      final isAuthenticated = await AuthHelper.requireAuth(
-                        context,
-                        ref,
-                        title: 'Login to Comment',
-                        message:
-                            'Please login to comment on this news article.',
-                      );
-                      if (isAuthenticated) {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => CommentsScreen(
-                              news: newsItem,
-                              onCommentPosted: () {
-                                // Refresh news data to update comment count
-                                ref.read(homeViewModelProvider).refresh();
-                              },
-                            ),
+                      final isLiked = likeStatus == LikeStatus.liked;
+                      final isDisliked = likeStatus == LikeStatus.disliked;
+
+                      return Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildIconWithCount(
+                            context,
+                            isLiked ? Icons.thumb_up : Icons.thumb_up_outlined,
+                            item.likesCount.toString(),
+                            () async {
+                              final isAuthenticated =
+                                  await AuthHelper.requireAuth(
+                                    context,
+                                    ref,
+                                    title: 'Login to Like',
+                                    message:
+                                        'Please login to like this news article.',
+                                  );
+                              if (isAuthenticated) {
+                                ref
+                                    .read(homeViewModelProvider)
+                                    .likeDislike(
+                                      likeableId: newsItem.id,
+                                      likeableType: LikeableType.news,
+                                      isLike: true,
+                                    );
+                              }
+                            },
+                            color: isLiked
+                                ? Colors.blue
+                                : Theme.of(context).appGrey600,
                           ),
-                        );
-                      }
+                          _buildIconWithCount(
+                            context,
+                            isDisliked
+                                ? Icons.thumb_down
+                                : Icons.thumb_down_outlined,
+                            item.dislikesCount.toString(),
+                            () async {
+                              final isAuthenticated = await AuthHelper.requireAuth(
+                                context,
+                                ref,
+                                title: 'Login to Dislike',
+                                message:
+                                    'Please login to dislike this news article.',
+                              );
+                              if (isAuthenticated) {
+                                ref
+                                    .read(homeViewModelProvider)
+                                    .likeDislike(
+                                      likeableId: newsItem.id,
+                                      likeableType: LikeableType.news,
+                                      isLike: false,
+                                    );
+                              }
+                            },
+                            color: isDisliked
+                                ? Colors.red
+                                : Theme.of(context).appGrey600,
+                          ),
+                        ],
+                      );
                     },
                   ),
+                  if (newsItem.isComment)
+                    // Comments count
+                    _buildIconWithCount(
+                      context,
+                      Icons.comment_outlined,
+                      newsItem.commentsCount.toString(),
+                      () async {
+                        _videoPreloader.pauseAllVideos();
+                        final isAuthenticated = await AuthHelper.requireAuth(
+                          context,
+                          ref,
+                          title: 'Login to Comment',
+                          message:
+                              'Please login to comment on this news article.',
+                        );
+                        if (isAuthenticated) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => CommentsScreen(
+                                news: newsItem,
+                                onCommentPosted: () {
+                                  // Refresh news data to update comment count
+                                  ref.read(homeViewModelProvider).refresh();
+                                },
+                              ),
+                            ),
+                          );
+                        }
+                      },
+                    ),
                   // Shares count
                   _buildIconWithCount(
                     context,
@@ -1074,7 +1092,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         await Share.share(shareUrl);
 
                         // Call the share API after share dialog closes
-                        // await ref.read(homeViewModelProvider).shareNews(newsItem.id, 'general');
+                        await ref
+                            .read(homeViewModelProvider)
+                            .shareNews(newsItem.id, 'general');
                       } catch (e) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(content: Text('Failed to share: $e')),
@@ -1092,58 +1112,157 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       newsItem.viewsCount.toString(),
                       () {},
                     ),
-                  // Popup menu for non-admin users
-                  if (currentUser != null &&
-                      (currentUser.primaryRole.value != "admin"))
-                    PopupMenuButton<String>(
-                      offset: const Offset(40, -120),
-                      icon: Icon(
-                        Icons.more_vert,
-                        color: Theme.of(context).appGrey600,
-                      ),
-                      onSelected: (value) {
-                        switch (value) {
-                          case 'report':
-                            // TODO: Implement report functionality
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Report feature coming soon!'),
-                              ),
-                            );
-                            break;
-                          case 'save':
-                            // TODO: Implement save functionality
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Save feature coming soon!'),
-                              ),
-                            );
-                            break;
-                        }
-                      },
-                      itemBuilder: (BuildContext context) => [
-                        const PopupMenuItem<String>(
-                          value: 'report',
-                          child: Row(
-                            children: [
-                              Icon(Icons.report, size: 20),
-                              SizedBox(width: 8),
-                              Text('Report'),
-                            ],
-                          ),
-                        ),
-                        const PopupMenuItem<String>(
-                          value: 'save',
-                          child: Row(
-                            children: [
-                              Icon(Icons.bookmark_border, size: 20),
-                              SizedBox(width: 8),
-                              Text('Save'),
-                            ],
-                          ),
-                        ),
-                      ],
+                  // Popup menu — show for all users
+                  PopupMenuButton<String>(
+                    offset: const Offset(40, -120),
+                    icon: Icon(
+                      Icons.more_vert,
+                      color: Theme.of(context).appGrey600,
                     ),
+                    onSelected: (value) async {
+                      switch (value) {
+                        case 'report':
+                          ReportBottomSheet.show(
+                            context,
+                            type: 'news',
+                            itemId: newsItem.id,
+                          );
+                          break;
+                        case 'block_user':
+                          final confirmed = await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              backgroundColor: Colors.white,
+                              shape: const RoundedRectangleBorder(
+                                borderRadius: AppRadius.lgAll,
+                              ),
+                              title: const Text('Block User'),
+                              content: Text(
+                                'Are you sure you want to block ${newsItem.authorName ?? "this user"}? You will no longer see their content.',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx, false),
+                                  child: const Text('Cancel'),
+                                ),
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx, true),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: Colors.red,
+                                  ),
+                                  child: const Text('Block'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (confirmed != true) break;
+                          debugPrint(
+                            '🚫 BLOCK USER: newsId=${newsItem.id}, authorId=${newsItem.authorId}',
+                          );
+                          if (newsItem.authorId == 0) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Cannot block: user id not available',
+                                  ),
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            }
+                            break;
+                          }
+                          final success = await AuthRepositoryImpl().blockUser(
+                            newsItem.authorId,
+                          );
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  success
+                                      ? 'User blocked'
+                                      : 'Failed to block user',
+                                ),
+                                backgroundColor: success
+                                    ? Colors.green[600]
+                                    : Colors.red[600],
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                            if (success) {
+                              ref
+                                  .read(homeViewModelProvider)
+                                  .loadNewsData(silent: true);
+                            }
+                          }
+                          break;
+                        case 'save':
+                          final savedNewsService = SavedNewsService(
+                            userId: ref.read(authViewModelProvider).user?.id,
+                          );
+                          final isSaved = await savedNewsService.isNewsSaved(
+                            newsItem.id,
+                          );
+                          if (isSaved) {
+                            await savedNewsService.removeNews(newsItem.id);
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Removed from saved'),
+                                ),
+                              );
+                            }
+                          } else {
+                            await savedNewsService.saveNews(newsItem);
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('News saved')),
+                              );
+                            }
+                          }
+                          break;
+                      }
+                    },
+                    color: Colors.white,
+                    itemBuilder: (BuildContext context) => [
+                      const PopupMenuItem<String>(
+                        value: 'report',
+                        child: Row(
+                          children: [
+                            Icon(Icons.report, size: 20),
+                            SizedBox(width: 8),
+                            Text('Report'),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuItem<String>(
+                        value: 'save',
+                        child: Row(
+                          children: [
+                            Icon(Icons.bookmark_border, size: 20),
+                            SizedBox(width: 8),
+                            Text('Save'),
+                          ],
+                        ),
+                      ),
+                      if (newsItem.authorId != 0 &&
+                          newsItem.authorId !=
+                              ref.read(authViewModelProvider).user?.id)
+                        const PopupMenuItem<String>(
+                          value: 'block_user',
+                          child: Row(
+                            children: [
+                              Icon(Icons.block, size: 20, color: Colors.red),
+                              SizedBox(width: 8),
+                              Text(
+                                'Block User',
+                                style: TextStyle(color: Colors.red),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
                 ],
               ),
             ],
@@ -1172,8 +1291,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     BuildContext context,
     IconData icon,
     String count,
-    VoidCallback onTap,
-  ) {
+    VoidCallback onTap, {
+    Color? color,
+  }) {
+    final iconColor = color ?? Theme.of(context).appGrey600;
     return InkWell(
       onTap: onTap,
       child: Container(
@@ -1181,14 +1302,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 22, color: Theme.of(context).appGrey600),
+            Icon(icon, size: 22, color: iconColor),
             const SizedBox(width: 4),
-            AutoScaledText(
+            Text(
               count,
               style: TextStyle(
-                fontSize: 14,
+                fontSize: scaledFontSize(14),
                 fontWeight: FontWeight.w600,
-                color: Theme.of(context).appTextPrimary,
+                color: iconColor,
               ),
             ),
           ],
@@ -1209,12 +1330,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     String description = '';
 
-    // Add short description if available
     if (translation.shortDescription.isNotEmpty) {
       description += translation.shortDescription;
     }
 
-    // Add content if available and different from short description
+    // Append content if it adds more info beyond the short description
     if (translation.content.isNotEmpty &&
         translation.content != translation.shortDescription) {
       if (description.isNotEmpty) description += '\n\n';
@@ -1268,12 +1388,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _buildBottomNavigation(BuildContext context) {
-    final authViewModel = ref.watch(authViewModelProvider);
-    final currentUser = authViewModel.user;
-    final isAdmin = currentUser?.primaryRole.canAccessAdmin ?? false;
-
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
       decoration: BoxDecoration(
         color: Theme.of(context).appCard,
         border: Border(top: BorderSide(color: Theme.of(context).appGrey300)),
@@ -1293,56 +1409,34 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             icon: Icon(Icons.home, color: Theme.of(context).appGrey600),
           ),
 
-          // Upload (Admin) or WhatsApp (Regular User)
-          if (isAdmin) ...[
-            // Admin: Show upload news icon
-            InkWell(
-              onTap: () async {
-                _videoPreloader.pauseAllVideos();
-                final isAuthenticated = await AuthHelper.requireAuth(
+          // Upload news icon — shown for all users
+          InkWell(
+            onTap: () async {
+              _videoPreloader.pauseAllVideos();
+              final isAuthenticated = await AuthHelper.requireAuth(
+                context,
+                ref,
+                title: 'Login to Upload',
+                message: 'Please login to upload news content.',
+              );
+              if (isAuthenticated) {
+                Navigator.push(
                   context,
-                  ref,
-                  title: 'Login to Upload',
-                  message: 'Please login to upload news content.',
-                );
-                if (isAuthenticated) {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const NewsUploadScreen(),
-                    ),
-                  );
-                }
-              },
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).primaryColor,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.add, color: Colors.white, size: 16),
-              ),
-            ),
-          ] else ...[
-            // Regular User: Show WhatsApp icon
-            IconButton(
-              onPressed: () {
-                _videoPreloader.pauseAllVideos();
-                // Open WhatsApp or WhatsApp Web
-                // You can implement WhatsApp sharing functionality here
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('WhatsApp feature coming soon!'),
+                  MaterialPageRoute(
+                    builder: (context) => const NewsUploadScreen(),
                   ),
                 );
-              },
-              icon: Icon(
-                Icons.share, // WhatsApp-like share icon
-                color: Theme.of(context).appGrey600,
-                size: 24,
+              }
+            },
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).primaryColor,
+                shape: BoxShape.circle,
               ),
+              child: const Icon(Icons.add, color: Colors.white, size: 16),
             ),
-          ],
+          ),
 
           // Notifications
           IconButton(

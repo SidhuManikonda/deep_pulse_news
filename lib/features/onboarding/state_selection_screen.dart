@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/state.dart' as location_models;
 import '../../providers/app_providers.dart';
 import '../../shared/widgets/shimmer_widget.dart';
-import '../../shared/widgets/auto_scaled_text.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_font_sizes.dart';
 import '../../features/onboarding/location_view_model.dart';
@@ -35,7 +34,7 @@ class _StateSelectionScreenState extends ConsumerState<StateSelectionScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: AutoScaledText(
+        title: Text(
           'Select State',
           style: TextStyle(
             fontSize: appFontSizeTitle,
@@ -76,7 +75,7 @@ class _StateSelectionScreenState extends ConsumerState<StateSelectionScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  AutoScaledText(
+                  Text(
                     'Choose your State',
                     style: TextStyle(
                       fontSize: appFontSizeHeader,
@@ -86,7 +85,7 @@ class _StateSelectionScreenState extends ConsumerState<StateSelectionScreen> {
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 8),
-                  AutoScaledText(
+                  Text(
                     'Select your state to get localized news content',
                     style: TextStyle(
                       fontSize: appFontSizeBody,
@@ -121,7 +120,7 @@ class _StateSelectionScreenState extends ConsumerState<StateSelectionScreen> {
 
     if (locationViewModel.states.isEmpty) {
       return Center(
-        child: AutoScaledText(
+        child: Text(
           'No states available',
           style: TextStyle(fontSize: appFontSizeSubHeader, color: Colors.grey),
         ),
@@ -147,7 +146,7 @@ class _StateSelectionScreenState extends ConsumerState<StateSelectionScreen> {
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
-        title: AutoScaledText(
+        title: Text(
           state.name,
           style: TextStyle(
             fontSize: appFontSizeSubHeader,
@@ -191,7 +190,7 @@ class _StateSelectionScreenState extends ConsumerState<StateSelectionScreen> {
           children: [
             Icon(Icons.error_outline, size: 64, color: Theme.of(context).appErrorLight),
             const SizedBox(height: 16),
-            AutoScaledText(
+            Text(
               title,
               style: TextStyle(
                 fontSize: appFontSizeHeader,
@@ -201,7 +200,7 @@ class _StateSelectionScreenState extends ConsumerState<StateSelectionScreen> {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
-            AutoScaledText(
+            Text(
               error,
               style: TextStyle(
                 fontSize: appFontSizeBody,
@@ -223,7 +222,7 @@ class _StateSelectionScreenState extends ConsumerState<StateSelectionScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
-              child: const AutoScaledText('Retry'),
+              child: const Text('Retry'),
             ),
           ],
         ),

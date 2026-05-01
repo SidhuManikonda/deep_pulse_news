@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class CachedImageWidget extends StatelessWidget {
   final String imageUrl;
@@ -16,34 +17,37 @@ class CachedImageWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Image.network(
-      imageUrl,
+    return CachedNetworkImage(
+      imageUrl: imageUrl,
       fit: fit,
-      cacheWidth: 800,
-      cacheHeight: 600,
-      loadingBuilder: (context, child, loadingProgress) {
-        if (loadingProgress == null) return child;
-        return placeholder ??
-            Container(
-              color: Colors.grey[300],
-              child: const Center(
-                child: CircularProgressIndicator(),
+      memCacheWidth: 800,
+      memCacheHeight: 600,
+      fadeInDuration: const Duration(milliseconds: 200),
+      fadeOutDuration: const Duration(milliseconds: 200),
+      placeholder: (context, url) =>
+          placeholder ??
+          Container(
+            color: Colors.grey[300],
+            child: const Center(
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
               ),
-            );
-      },
-      errorBuilder: (context, error, stackTrace) {
-        return errorWidget ??
-            Container(
-              color: Colors.grey[300],
-              child: Center(
-                child: Icon(
-                  Icons.image,
-                  size: 64,
-                  color: Colors.grey[600],
-                ),
+            ),
+          ),
+      errorWidget: (context, url, error) =>
+          this.errorWidget ??
+          Container(
+            color: Colors.grey[300],
+            child: Center(
+              child: Icon(
+                Icons.image,
+                size: 64,
+                color: Colors.grey[600],
               ),
-            );
-      },
+            ),
+          ),
     );
   }
 }

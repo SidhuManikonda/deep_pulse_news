@@ -12,6 +12,7 @@ import '../../shared/widgets/custom_button.dart';
 import '../../shared/widgets/category_chip.dart';
 import '../../shared/widgets/shimmer_widget.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/constants/app_font_sizes.dart';
 
 class TopicsSelectionScreen extends ConsumerStatefulWidget {
   const TopicsSelectionScreen({super.key});
@@ -57,7 +58,7 @@ class _TopicsSelectionScreenState extends ConsumerState<TopicsSelectionScreen> {
               Text(
                 'Choose Topics',
                 style: TextStyle(
-                  fontSize: 24,
+                  fontSize: scaledFontSize(24),
                   fontWeight: FontWeight.bold,
                   color: Theme.of(context).textTheme.headlineLarge?.color,
                 ),
@@ -66,7 +67,7 @@ class _TopicsSelectionScreenState extends ConsumerState<TopicsSelectionScreen> {
               Text(
                 'Select topics you\'re interested in to get personalized news',
                 style: TextStyle(
-                  fontSize: 16,
+                  fontSize: scaledFontSize(16),
                   color: Theme.of(context).textTheme.bodyMedium?.color,
                 ),
               ),
@@ -139,7 +140,7 @@ class _TopicsSelectionScreenState extends ConsumerState<TopicsSelectionScreen> {
               Text(
                 '${topicViewModel.selectedTopics.length} topics selected',
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: scaledFontSize(14),
                   color: Theme.of(context).textTheme.bodyMedium?.color,
                 ),
               ),

@@ -13,7 +13,7 @@ class NationalNewsScreen extends ConsumerWidget {
       appBar: AppBar(
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         elevation: 0,
-        title: AutoScaledText(
+        title: Text(
           'National News',
           style: TextStyle(
             fontSize: appFontSizeHeader,
@@ -24,7 +24,7 @@ class NationalNewsScreen extends ConsumerWidget {
         centerTitle: true,
       ),
       body: Center(
-        child: AutoScaledText(
+        child: Text(
           'National News Screen',
           style: TextStyle(
             fontSize: appFontSizeTitle,

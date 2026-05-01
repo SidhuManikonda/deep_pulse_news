@@ -1,12 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/theme/app_theme.dart';
 import 'core/routing/app_router.dart';
 import 'providers/app_providers.dart';
-import 'providers/font_provider.dart';
+
+/// Global key for ScaffoldMessenger - use to show snackbars from anywhere
+final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
+    GlobalKey<ScaffoldMessengerState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+  ]);
   runApp(const ProviderScope(child: MyApp()));
 }
 
@@ -23,24 +30,30 @@ class _MyAppState extends ConsumerState<MyApp> {
     super.initState();
     Future.microtask(() {
       ref.read(themeControllerProvider).init();
-      ref.read(fontControllerProvider).initialize();
     });
   }
 
   @override
   Widget build(BuildContext context) {
     final themeController = ref.watch(themeControllerProvider);
-    final fontController = ref.watch(fontControllerProvider);
-    final fontScale = fontController.fontScale;
 
     return MaterialApp(
       title: 'Deep Pulse News',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme(fontScale),
-      darkTheme: AppTheme.darkTheme(fontScale),
+      scaffoldMessengerKey: scaffoldMessengerKey,
+      theme: AppTheme.lightTheme(),
+      darkTheme: AppTheme.darkTheme(),
       themeMode: themeController.themeMode,
       onGenerateRoute: AppRouter.generateRoute,
       initialRoute: AppRouter.splash,
+      builder: (context, child) {
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.noScaling,
+          ),
+          child: child!,
+        );
+      },
     );
   }
 }

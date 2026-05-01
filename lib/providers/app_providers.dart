@@ -1,4 +1,5 @@
 import 'package:deep_pulse_news/features/admin/admin_user_management_controller.dart';
+import 'package:deep_pulse_news/features/admin/location_management_controller.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -68,4 +69,9 @@ final errorProvider = StateProvider<String?>((ref) => null);
 final adminUserManagementControllerProvider =
     ChangeNotifierProvider<AdminUserManagementController>((ref) {
       return AdminUserManagementController();
+    });
+
+final locationManagementControllerProvider =
+    ChangeNotifierProvider<LocationManagementController>((ref) {
+      return LocationManagementController();
     });

@@ -1,3 +1,4 @@
+import 'package:deep_pulse_news/features/admin/admin_user_management_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -5,6 +6,7 @@ import '../../core/constants/app_colors.dart';
 import '../../data/models/user.dart';
 import '../../data/models/user_comment.dart';
 import '../../providers/app_providers.dart';
+import '../../core/constants/app_font_sizes.dart';
 
 class UserCommentsScreen extends ConsumerStatefulWidget {
   final User user;
@@ -56,7 +58,7 @@ class _UserCommentsScreenState extends ConsumerState<UserCommentsScreen> {
       title: Text(
         'User Comments',
         style: TextStyle(
-          fontSize: 18,
+          fontSize: scaledFontSize(18),
           fontWeight: FontWeight.bold,
           color: theme.appTextPrimary,
         ),
@@ -91,7 +93,7 @@ class _UserCommentsScreenState extends ConsumerState<UserCommentsScreen> {
               child: Text(
                 user.name.isNotEmpty ? user.name[0].toUpperCase() : 'U',
                 style: TextStyle(
-                  fontSize: 22,
+                  fontSize: scaledFontSize(22),
                   fontWeight: FontWeight.bold,
                   color: theme.appPrimary,
                 ),
@@ -106,7 +108,7 @@ class _UserCommentsScreenState extends ConsumerState<UserCommentsScreen> {
                 Text(
                   user.name,
                   style: TextStyle(
-                    fontSize: 16,
+                    fontSize: scaledFontSize(16),
                     fontWeight: FontWeight.w700,
                     color: theme.appTextPrimary,
                   ),
@@ -115,13 +117,13 @@ class _UserCommentsScreenState extends ConsumerState<UserCommentsScreen> {
                 Text(
                   user.email,
                   style: TextStyle(
-                      fontSize: 13, color: theme.appTextSecondary),
+                      fontSize: scaledFontSize(13), color: theme.appTextSecondary),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   user.mobile,
                   style:
-                      TextStyle(fontSize: 13, color: theme.appTextSecondary),
+                      TextStyle(fontSize: scaledFontSize(13), color: theme.appTextSecondary),
                 ),
               ],
             ),
@@ -138,7 +140,7 @@ class _UserCommentsScreenState extends ConsumerState<UserCommentsScreen> {
             child: Text(
               user.isActive ? 'Active' : 'Inactive',
               style: TextStyle(
-                fontSize: 12,
+                fontSize: scaledFontSize(12),
                 fontWeight: FontWeight.w600,
                 color: user.isActive ? Colors.green : Colors.red,
               ),
@@ -149,7 +151,7 @@ class _UserCommentsScreenState extends ConsumerState<UserCommentsScreen> {
     );
   }
 
-  Widget _buildBody(dynamic controller, ThemeData theme) {
+  Widget _buildBody(AdminUserManagementController  controller, ThemeData theme) {
     if (controller.isLoadingComments) {
       return Center(
         child: CircularProgressIndicator(
@@ -169,7 +171,7 @@ class _UserCommentsScreenState extends ConsumerState<UserCommentsScreen> {
             Text(
               'Failed to load comments',
               style:
-                  TextStyle(fontSize: 15, color: theme.appTextSecondary),
+                  TextStyle(fontSize: scaledFontSize(15), color: theme.appTextSecondary),
             ),
             const SizedBox(height: 16),
             ElevatedButton.icon(
@@ -190,7 +192,7 @@ class _UserCommentsScreenState extends ConsumerState<UserCommentsScreen> {
       );
     }
 
-    final comments = controller.userComments as List<UserCommentEntry>;
+    final comments = controller.userComments;
 
     if (comments.isEmpty) {
       return Center(
@@ -203,7 +205,7 @@ class _UserCommentsScreenState extends ConsumerState<UserCommentsScreen> {
             Text(
               'No comments yet',
               style: TextStyle(
-                  fontSize: 15,
+                  fontSize: scaledFontSize(15),
                   color: theme.appTextSecondary,
                   fontWeight: FontWeight.w500),
             ),
@@ -257,7 +259,7 @@ class _UserCommentsScreenState extends ConsumerState<UserCommentsScreen> {
                   child: Text(
                     entry.news.title,
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: scaledFontSize(13),
                       fontWeight: FontWeight.w600,
                       color: theme.appTextPrimary,
                     ),
@@ -277,7 +279,7 @@ class _UserCommentsScreenState extends ConsumerState<UserCommentsScreen> {
             child: Text(
               entry.comment.content,
               style: TextStyle(
-                fontSize: 14,
+                fontSize: scaledFontSize(14),
                 color: theme.appTextPrimary,
                 height: 1.4,
               ),
@@ -294,12 +296,12 @@ class _UserCommentsScreenState extends ConsumerState<UserCommentsScreen> {
                 const SizedBox(width: 4),
                 Text(
                   timeAgo,
-                  style: TextStyle(fontSize: 12, color: theme.appTextLight),
+                  style: TextStyle(fontSize: scaledFontSize(12), color: theme.appTextLight),
                 ),
                 const SizedBox(width: 4),
                 Text(
                   '· ${_formatDate(entry.comment.createdAt.toLocal())}',
-                  style: TextStyle(fontSize: 11, color: theme.appTextLight),
+                  style: TextStyle(fontSize: scaledFontSize(11), color: theme.appTextLight),
                 ),
                 // const Spacer(),
                 // _buildApprovalBadge(entry.comment.isApproved, theme),
@@ -324,7 +326,7 @@ class _UserCommentsScreenState extends ConsumerState<UserCommentsScreen> {
       child: Text(
         status,
         style: TextStyle(
-          fontSize: 10,
+          fontSize: scaledFontSize(10),
           fontWeight: FontWeight.w600,
           color: isPublished ? Colors.green : Colors.orange,
         ),
@@ -358,7 +360,7 @@ class _UserCommentsScreenState extends ConsumerState<UserCommentsScreen> {
           Text(
             isApproved ? 'Approved' : 'Pending',
             style: TextStyle(
-              fontSize: 11,
+              fontSize: scaledFontSize(11),
               fontWeight: FontWeight.w600,
               color: isApproved ? Colors.green : Colors.orange,
             ),

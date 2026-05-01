@@ -7,8 +7,10 @@ class User {
   final DateTime? otpExpiresAt;
   final bool isActive;
   final DateTime? emailVerifiedAt;
-  final DateTime createdAt;
-  final DateTime updatedAt;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+  final String? roleName;
+  final int? userId;
   final String? rememberToken;
   final List<Role>? roles;
   final int? stateId;
@@ -17,6 +19,8 @@ class User {
   final String? stateName;
   final String? districtName;
   final String? mandalName;
+  final bool? isBlocked;
+  final bool isBlockedByAdmin;
 
   User({
     required this.id,
@@ -27,9 +31,11 @@ class User {
     this.otpExpiresAt,
     required this.isActive,
     this.emailVerifiedAt,
-    required this.createdAt,
-    required this.updatedAt,
+    this.createdAt,
+    this.updatedAt,
     this.rememberToken,
+    this.roleName,
+    this.userId,
     this.roles,
     this.stateId,
     this.districtId,
@@ -37,6 +43,8 @@ class User {
     this.stateName,
     this.districtName,
     this.mandalName,
+    this.isBlocked,
+    this.isBlockedByAdmin = false,
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
@@ -55,18 +63,28 @@ class User {
       emailVerifiedAt: json['email_verified_at'] != null 
           ? DateTime.parse(json['email_verified_at']) 
           : null,
-      createdAt: DateTime.parse(json['created_at']),
-      updatedAt: DateTime.parse(json['updated_at']),
+      createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : null,
+      updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at']) : null,
       rememberToken: json['remember_token'],
+      roleName: json['role_name'],
+      userId: json['user_id'],
       roles: json['roles'] != null 
           ? (json['roles'] as List).map((role) => Role.fromJson(role)).toList()
           : null,
-      stateId: json['state_id'],
-      districtId: json['district_id'],
-      mandalId: json['mandal_id'],
+      stateId: json['state_id'] ?? (json['user_detail'] != null ? json['user_detail']['state_id'] : null),
+      districtId: json['district_id'] ?? (json['user_detail'] != null ? json['user_detail']['district_id'] : null),
+      mandalId: json['mandal_id'] ?? (json['user_detail'] != null ? json['user_detail']['mandal_id'] : null),
       stateName: json['state_name'],
       districtName: json['district_name'],
       mandalName: json['mandal_name'],
+      isBlocked: json['is_blocked'] == null
+          ? null
+          : (json['is_blocked'] is int
+              ? json['is_blocked'] == 1
+              : json['is_blocked'] == true),
+      isBlockedByAdmin: json['is_blocked_by_admin'] is int
+          ? json['is_blocked_by_admin'] == 1
+          : json['is_blocked_by_admin'] == true,
     );
   }
 
@@ -80,9 +98,11 @@ class User {
       'otp_expires_at': otpExpiresAt?.toIso8601String(),
       'is_active': isActive,
       'email_verified_at': emailVerifiedAt?.toIso8601String(),
-      'created_at': createdAt.toIso8601String(),
-      'updated_at': updatedAt.toIso8601String(),
+      'created_at': createdAt?.toIso8601String(),
+      'updated_at': updatedAt?.toIso8601String(),
       'remember_token': rememberToken,
+      'role_name': roleName,
+      'user_id': userId,
       'roles': roles?.map((role) => role.toJson()).toList(),
       'state_id': stateId,
       'district_id': districtId,
@@ -90,6 +110,8 @@ class User {
       'state_name': stateName,
       'district_name': districtName,
       'mandal_name': mandalName,
+      'is_blocked': isBlocked,
+      'is_blocked_by_admin': isBlockedByAdmin,
     };
   }
 
@@ -105,6 +127,8 @@ class User {
     DateTime? createdAt,
     DateTime? updatedAt,
     String? rememberToken,
+    String? roleName,
+    int? userId,
     List<Role>? roles,
     int? stateId,
     int? districtId,
@@ -112,6 +136,8 @@ class User {
     String? stateName,
     String? districtName,
     String? mandalName,
+    bool? isBlocked,
+    bool? isBlockedByAdmin,
   }) {
     return User(
       id: id ?? this.id,
@@ -125,6 +151,8 @@ class User {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       rememberToken: rememberToken ?? this.rememberToken,
+      roleName: roleName ?? this.roleName,
+      userId: userId ?? this.userId,
       roles: roles ?? this.roles,
       stateId: stateId ?? this.stateId,
       districtId: districtId ?? this.districtId,
@@ -132,6 +160,8 @@ class User {
       stateName: stateName ?? this.stateName,
       districtName: districtName ?? this.districtName,
       mandalName: mandalName ?? this.mandalName,
+      isBlocked: isBlocked ?? this.isBlocked,
+      isBlockedByAdmin: isBlockedByAdmin ?? this.isBlockedByAdmin,
     );
   }
 }
@@ -139,20 +169,20 @@ class User {
 class Role {
   final int id;
   final String name;
-  final String slug;
-  final String description;
-  final DateTime createdAt;
-  final DateTime updatedAt;
+  final String? slug;
+  final String? description;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
   final RolePivot? pivot;
   final List<Permission>? permissions;
 
   Role({
     required this.id,
     required this.name,
-    required this.slug,
-    required this.description,
-    required this.createdAt,
-    required this.updatedAt,
+    this.slug,
+    this.description,
+    this.createdAt,
+    this.updatedAt,
     this.pivot,
     this.permissions,
   });
@@ -161,10 +191,10 @@ class Role {
     return Role(
       id: json['id'] ?? 0,
       name: json['name'] ?? '',
-      slug: json['slug'] ?? '',
-      description: json['description'] ?? '',
-      createdAt: DateTime.parse(json['created_at']),
-      updatedAt: DateTime.parse(json['updated_at']),
+      slug: json['slug'],
+      description: json['description'],
+      createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : null,
+      updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at']) : null,
       pivot: json['pivot'] != null ? RolePivot.fromJson(json['pivot']) : null,
       permissions: json['permissions'] != null
           ? (json['permissions'] as List).map((permission) => Permission.fromJson(permission)).toList()
@@ -178,8 +208,8 @@ class Role {
       'name': name,
       'slug': slug,
       'description': description,
-      'created_at': createdAt.toIso8601String(),
-      'updated_at': updatedAt.toIso8601String(),
+      'created_at': createdAt?.toIso8601String(),
+      'updated_at': updatedAt?.toIso8601String(),
       'pivot': pivot?.toJson(),
       'permissions': permissions?.map((permission) => permission.toJson()).toList(),
     };
@@ -213,19 +243,19 @@ class RolePivot {
 class Permission {
   final int id;
   final String name;
-  final String slug;
+  final String? slug;
   final String? description;
-  final DateTime createdAt;
-  final DateTime updatedAt;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
   final PermissionPivot? pivot;
 
   Permission({
     required this.id,
     required this.name,
-    required this.slug,
+    this.slug,
     this.description,
-    required this.createdAt,
-    required this.updatedAt,
+    this.createdAt,
+    this.updatedAt,
     this.pivot,
   });
 
@@ -233,10 +263,10 @@ class Permission {
     return Permission(
       id: json['id'] ?? 0,
       name: json['name'] ?? '',
-      slug: json['slug'] ?? '',
+      slug: json['slug'],
       description: json['description'],
-      createdAt: DateTime.parse(json['created_at']),
-      updatedAt: DateTime.parse(json['updated_at']),
+      createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : null,
+      updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at']) : null,
       pivot: json['pivot'] != null ? PermissionPivot.fromJson(json['pivot']) : null,
     );
   }
@@ -247,8 +277,8 @@ class Permission {
       'name': name,
       'slug': slug,
       'description': description,
-      'created_at': createdAt.toIso8601String(),
-      'updated_at': updatedAt.toIso8601String(),
+      'created_at': createdAt?.toIso8601String(),
+      'updated_at': updatedAt?.toIso8601String(),
       'pivot': pivot?.toJson(),
     };
   }

@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:deep_pulse_news/data/models/district.dart';
+import 'package:deep_pulse_news/data/models/news_media.dart';
+import 'package:video_compress/video_compress.dart';
 import 'package:deep_pulse_news/data/models/mandal.dart';
 import 'package:deep_pulse_news/data/models/state.dart' as location_models;
 import 'package:deep_pulse_news/data/models/topic.dart';
@@ -29,6 +31,7 @@ class NewsUploadViewModel extends ChangeNotifier {
   bool? _isMoreChecked = false;
   final List<Topic> _selectedCategories = [];
   final List<File> _selectedMedia = [];
+  final List<NewsMedia> _existingMedia = []; // Media from prefilled news
   bool _acceptTerms = false;
 
   // Location data
@@ -51,6 +54,7 @@ class NewsUploadViewModel extends ChangeNotifier {
   bool? get isMoreChecked => _isMoreChecked;
   List<Topic> get selectedCategories => _selectedCategories;
   List<File> get selectedMedia => _selectedMedia;
+  List<NewsMedia> get existingMedia => _existingMedia;
   bool get acceptTerms => _acceptTerms;
 
   // ── Location getters ────────────────────────────────────────────────────────
@@ -111,6 +115,11 @@ class NewsUploadViewModel extends ChangeNotifier {
 
   void removeMedia(int index) {
     _selectedMedia.removeAt(index);
+    notifyListeners();
+  }
+
+  void removeExistingMedia(int index) {
+    _existingMedia.removeAt(index);
     notifyListeners();
   }
 
@@ -205,9 +214,115 @@ class NewsUploadViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Bulk select all districts and fetch mandals in parallel
+  Future<void> selectAllDistricts(List<District> districts) async {
+    for (final d in districts) {
+      if (!_selectedDistrictIds.contains(d.id)) {
+        _selectedDistrictIds.add(d.id);
+      }
+    }
+    notifyListeners();
+
+    // Fetch mandals for districts that haven't been loaded yet, in parallel
+    final toFetch = districts.where((d) => !_mandalsByDistrict.containsKey(d.id)).toList();
+    if (toFetch.isNotEmpty) {
+      final futures = toFetch.map((d) async {
+        try {
+          _mandalsByDistrict[d.id] = await _mandalRepository.getMandalsByDistrict(d.id);
+        } catch (_) {
+          _mandalsByDistrict[d.id] = [];
+        }
+      });
+      await Future.wait(futures);
+      notifyListeners();
+    }
+  }
+
+  void deselectAllDistricts(List<District> districts) {
+    final ids = districts.map((d) => d.id).toSet();
+    _selectedDistrictIds.removeWhere(ids.contains);
+    // Also deselect mandals belonging to these districts
+    for (final d in districts) {
+      final mandalIds = (_mandalsByDistrict[d.id] ?? []).map((m) => m.id).toList();
+      _selectedMandalIds.removeWhere(mandalIds.contains);
+    }
+    notifyListeners();
+  }
+
+  // Bulk select/deselect all mandals
+  void selectAllMandals(List<Mandal> mandals) {
+    for (final m in mandals) {
+      if (!_selectedMandalIds.contains(m.id)) {
+        _selectedMandalIds.add(m.id);
+      }
+    }
+    notifyListeners();
+  }
+
+  void deselectAllMandals(List<Mandal> mandals) {
+    final ids = mandals.map((m) => m.id).toSet();
+    _selectedMandalIds.removeWhere(ids.contains);
+    notifyListeners();
+  }
+
+  // ── Prefill from existing news (for editing pending news) ──────────────────
+  Future<void> prefillFromNews({
+    required List<Topic> allTopics,
+    required List<int> topicIds,
+    required List<int> stateIds,
+    required List<int> districtIds,
+    required List<int> mandalIds,
+    List<NewsMedia> existingMedia = const [],
+  }) async {
+    clearData();
+
+    // Set existing media from the news
+    _existingMedia.addAll(existingMedia);
+
+    // Wait for states to load if not already loaded
+    await loadStates();
+
+    // Select topics
+    for (final topicId in topicIds) {
+      final match = allTopics.where((t) => t.id == topicId);
+      if (match.isNotEmpty) {
+        _selectedCategories.add(match.first);
+      }
+    }
+
+    // Select states and load their districts
+    for (final sId in stateIds) {
+      final match = _availableStates.where((s) => s.id == sId);
+      if (match.isNotEmpty) {
+        await toggleState(match.first);
+      }
+    }
+
+    // Select districts and load their mandals
+    for (final dId in districtIds) {
+      final match = availableDistricts.where((d) => d.id == dId);
+      if (match.isNotEmpty) {
+        await toggleDistrict(match.first);
+      }
+    }
+
+    // Select mandals
+    for (final mId in mandalIds) {
+      final match = availableMandals.where((m) => m.id == mId);
+      if (match.isNotEmpty) {
+        if (!_selectedMandalIds.contains(mId)) {
+          _selectedMandalIds.add(mId);
+        }
+      }
+    }
+
+    notifyListeners();
+  }
+
   // ── Upload ──────────────────────────────────────────────────────────────────
   void clearData() {
     _selectedMedia.clear();
+    _existingMedia.clear();
     _isMoreChecked = false;
     _selectedCategories.clear();
     _selectedStateIds.clear();
@@ -223,34 +338,99 @@ class NewsUploadViewModel extends ChangeNotifier {
     required String content,
     required List<Topic> categories,
     required List<File> mediaFiles,
+    int? editNewsId,
+    String? status,
+    bool skipLocationValidation = false,
+    bool isImportant = false,
+    bool isComment = true,
+    bool showProfile = true,
   }) async {
     _isUploading = true;
     _error = null;
     notifyListeners();
 
     try {
-      if (_selectedStateIds.isEmpty) {
-        _error = 'Please select at least one state.';
-        _isUploading = false;
-        notifyListeners();
-        return false;
+      if (!skipLocationValidation) {
+        if (_selectedStateIds.isEmpty) {
+          _error = 'Please select at least one state.';
+          _isUploading = false;
+          notifyListeners();
+          return false;
+        }
+        if (_selectedDistrictIds.isEmpty) {
+          _error = 'Please select at least one district.';
+          _isUploading = false;
+          notifyListeners();
+          return false;
+        }
+        if (_selectedMandalIds.isEmpty) {
+          _error = 'Please select at least one mandal.';
+          _isUploading = false;
+          notifyListeners();
+          return false;
+        }
       }
-      if (_selectedDistrictIds.isEmpty) {
-        _error = 'Please select at least one district.';
-        _isUploading = false;
-        notifyListeners();
-        return false;
-      }
-      if (_selectedMandalIds.isEmpty) {
-        _error = 'Please select at least one mandal.';
-        _isUploading = false;
-        notifyListeners();
-        return false;
+
+      // Compress media files before uploading
+      final processedFiles = <File>[];
+      for (final file in mediaFiles) {
+        final path = file.path.toLowerCase();
+        if (path.endsWith('.mp4') ||
+            path.endsWith('.mov') ||
+            path.endsWith('.avi') ||
+            path.endsWith('.mkv') ||
+            path.endsWith('.webm')) {
+          // Video compression
+          try {
+            final info = await VideoCompress.compressVideo(
+              file.path,
+              quality: VideoQuality.MediumQuality,
+              deleteOrigin: false,
+            );
+            if (info != null && info.file != null) {
+              processedFiles.add(info.file!);
+            } else {
+              processedFiles.add(file);
+            }
+          } catch (e) {
+            debugPrint('Video compression failed, using original: $e');
+            processedFiles.add(file);
+          }
+        } else if (path.endsWith('.jpg') ||
+            path.endsWith('.jpeg') ||
+            path.endsWith('.png') ||
+            path.endsWith('.webp')) {
+          // Image compression — skip if already small (< 1MB)
+          try {
+            final fileSize = await file.length();
+            if (fileSize > 1024 * 1024) {
+              // Read, decode, re-encode at 80% quality with max 1920px dimension
+              final bytes = await file.readAsBytes();
+              final image = await decodeImageFromList(bytes);
+              final scale = image.width > 1920 ? 1920 / image.width : 1.0;
+
+              if (scale < 1.0) {
+                // Resize needed — use image_picker's built-in resize if available
+                // For now, just send original since proper resize needs image package
+                processedFiles.add(file);
+              } else {
+                processedFiles.add(file);
+              }
+            } else {
+              processedFiles.add(file);
+            }
+          } catch (e) {
+            debugPrint('Image check failed, using original: $e');
+            processedFiles.add(file);
+          }
+        } else {
+          processedFiles.add(file);
+        }
       }
 
       final newsRequest = CreateNewsRequest(
         topicIds: categories.map((t) => t.id).toList(),
-        status: 'pending',
+        status: status ?? (editNewsId != null ? 'published' : 'pending'),
         title: headline,
         slug: _generateSlug(headline),
         shortDescription: description,
@@ -258,10 +438,17 @@ class NewsUploadViewModel extends ChangeNotifier {
         stateIds: List.from(_selectedStateIds),
         districtIds: List.from(_selectedDistrictIds),
         mandalIds: List.from(_selectedMandalIds),
-        files: mediaFiles,
+        files: processedFiles,
+        isImportant: isImportant,
+        isComment: isComment,
+        showProfile: showProfile,
       );
 
-      await _newsRepository.createNews(newsRequest);
+      if (editNewsId != null) {
+        await _newsRepository.updateNews(editNewsId, newsRequest);
+      } else {
+        await _newsRepository.createNews(newsRequest);
+      }
       _isUploading = false;
       notifyListeners();
       return true;

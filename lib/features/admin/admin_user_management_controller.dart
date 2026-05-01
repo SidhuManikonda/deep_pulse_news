@@ -15,11 +15,12 @@ class AdminUserManagementController extends ChangeNotifier {
   location_models.State? _selectedState;
   District? _selectedDistrict;
   Mandal? _selectedMandal;
+  bool? _isPasswordVisible = false;
 
-  /// Static role IDs
-  static const int roleIdSubAdmin = 2;
-  static const int roleIdEditor = 3;
-  static const int roleIdReporter = 4;
+  /// Roles from API
+  List<Role> _roles = [];
+  bool _isLoadingRoles = false;
+  String? _rolesError;
 
   /// Users list state
   List<User> _users = [];
@@ -40,9 +41,35 @@ class AdminUserManagementController extends ChangeNotifier {
   List<User> get users => _users;
   bool get isLoadingUsers => _isLoadingUsers;
   String? get usersError => _usersError;
+  List<Role> get roles => _roles;
+  bool get isLoadingRoles => _isLoadingRoles;
+  String? get rolesError => _rolesError;
   List<UserCommentEntry> get userComments => _userComments;
   bool get isLoadingComments => _isLoadingComments;
   String? get commentsError => _commentsError;
+  bool get isPasswordVisible => _isPasswordVisible ?? false;
+
+  Future<void> fetchRoles({
+    required AuthRepository authRepository,
+    bool forceRefresh = false,
+  }) async {
+    if (_isLoadingRoles) return;
+    if (!forceRefresh && _roles.isNotEmpty) return;
+
+    _isLoadingRoles = true;
+    _rolesError = null;
+    notifyListeners();
+
+    try {
+      final result = await authRepository.getRoles();
+      _roles = result ?? [];
+    } catch (e) {
+      _rolesError = e.toString();
+    } finally {
+      _isLoadingRoles = false;
+      notifyListeners();
+    }
+  }
 
   Future<void> fetchUserComments(int userId) async {
     _isLoadingComments = true;
@@ -60,6 +87,22 @@ class AdminUserManagementController extends ChangeNotifier {
     }
   }
 
+  Future<bool> deleteUser({
+    required AuthRepository authRepository,
+    required int userId,
+  }) async {
+    try {
+      final success = await authRepository.deleteUser(userId);
+      if (success) {
+        _users.removeWhere((u) => u.id == userId);
+        notifyListeners();
+      }
+      return success;
+    } catch (e) {
+      return false;
+    }
+  }
+
   Future<void> fetchUsers({
     required AuthRepository authRepository,
     bool forceRefresh = false,
@@ -74,13 +117,30 @@ class AdminUserManagementController extends ChangeNotifier {
     try {
       final result = await authRepository.getUserList();
       _users = result ?? [];
+      debugPrint('🔍 FETCH USERS: loaded ${_users.length} users');
     } catch (e) {
+      debugPrint('🔍 FETCH USERS ERROR: $e');
       _usersError = e.toString();
     } finally {
       _isLoadingUsers = false;
       notifyListeners();
     }
   }
+
+  /// Get selected role's slug
+  String? get selectedRoleSlug {
+    if (_selectedRoleId == null) return null;
+    final role = _roles.where((r) => r.id == _selectedRoleId).firstOrNull;
+    return role?.slug;
+  }
+
+  /// Get selected role's name
+  String? get selectedRoleName {
+    if (_selectedRoleId == null) return null;
+    final role = _roles.where((r) => r.id == _selectedRoleId).firstOrNull;
+    return role?.name.toLowerCase();
+  }
+
   /// change role
   void setRole(int? roleId) {
     _selectedRoleId = roleId;
@@ -116,16 +176,8 @@ class AdminUserManagementController extends ChangeNotifier {
 
   /// Role display
   String getRoleDisplayNameFromId(int roleId) {
-    switch (roleId) {
-      case roleIdSubAdmin:
-        return 'Sub-Admin';
-      case roleIdEditor:
-        return 'Editor';
-      case roleIdReporter:
-        return 'Reporter';
-      default:
-        return 'Unknown Role';
-    }
+    final role = _roles.where((r) => r.id == roleId).firstOrNull;
+    return role?.name ?? 'Unknown Role';
   }
 
   /// Create user
@@ -149,13 +201,13 @@ class AdminUserManagementController extends ChangeNotifier {
       mandalId = _selectedMandal?.id;
     }
 
-    if (currentRole == 'subAdmin') {
+    if (currentRole == 'subadmin') {
       stateId = currentUser.stateId;
       districtId = _selectedDistrict?.id;
       mandalId = _selectedMandal?.id;
     }
 
-    if (currentRole == 'editor') {
+    if (currentRole == 'dist-reporter') {
       stateId = currentUser.stateId;
       districtId = currentUser.districtId;
       mandalId = _selectedMandal?.id;
@@ -174,9 +226,15 @@ class AdminUserManagementController extends ChangeNotifier {
 
     if (success) {
       resetSelections();
+      
     }
 
     return success;
+  }
+
+  void togglePasswordVisibility() {
+    _isPasswordVisible = !(_isPasswordVisible ?? false);
+    notifyListeners();
   }
 
   void resetSelections() {

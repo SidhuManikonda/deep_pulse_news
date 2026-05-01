@@ -32,4 +32,11 @@ class State {
       'created_at': createdAt.toIso8601String(),
     };
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is State && id == other.id;
+
+  @override
+  int get hashCode => id.hashCode;
 }

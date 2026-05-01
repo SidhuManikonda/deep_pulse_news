@@ -9,10 +9,83 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/services/media_picker_services.dart';
+import '../../data/models/news.dart';
+import '../../data/models/user.dart';
+import '../../extensions/user_extensions.dart';
+import '../../shared/widgets/cached_image_widget.dart';
 import 'news_upload_view_model.dart';
+import '../../core/constants/app_font_sizes.dart';
+
+// Clean accent color used throughout the form instead of the brand red
+const _kAccent = Color(0xFF2563EB); // A calm, professional blue
+const _kAccentLight = Color(0xFFDBEAFE); // Very light blue for backgrounds
+const _kSuccess = Color(0xFF16A34A); // Green for the send button
+
+/// Determines what the upload screen shows based on user role.
+class UploadPermissions {
+  final bool showTopics;
+  final bool showLocations;
+  final bool canSelectStates;
+  final bool canSelectDistricts;
+  final bool canSelectMandals;
+  final bool limitTopicToYourArea; // dist-reporter can only pick "Your Area"
+
+  const UploadPermissions._({
+    required this.showTopics,
+    required this.showLocations,
+    required this.canSelectStates,
+    required this.canSelectDistricts,
+    required this.canSelectMandals,
+    required this.limitTopicToYourArea,
+  });
+
+  factory UploadPermissions.forRole(String role) {
+    switch (role) {
+      case 'admin':
+        return const UploadPermissions._(
+          showTopics: true,
+          showLocations: true,
+          canSelectStates: true,
+          canSelectDistricts: true,
+          canSelectMandals: true,
+          limitTopicToYourArea: false,
+        );
+      case 'subadmin':
+        return const UploadPermissions._(
+          showTopics: true,
+          showLocations: true,
+          canSelectStates: false,
+          canSelectDistricts: true,
+          canSelectMandals: true,
+          limitTopicToYourArea: false,
+        );
+      case 'dist-reporter':
+        return const UploadPermissions._(
+          showTopics: true,
+          showLocations: true,
+          canSelectStates: false,
+          canSelectDistricts: false,
+          canSelectMandals: true,
+          limitTopicToYourArea: true,
+        );
+      // reader & reporter: no topics/locations UI, auto-assigned
+      default:
+        return const UploadPermissions._(
+          showTopics: false,
+          showLocations: false,
+          canSelectStates: false,
+          canSelectDistricts: false,
+          canSelectMandals: false,
+          limitTopicToYourArea: false,
+        );
+    }
+  }
+}
 
 class NewsUploadScreen extends ConsumerStatefulWidget {
-  const NewsUploadScreen({super.key});
+  final News? prefillNews;
+
+  const NewsUploadScreen({super.key, this.prefillNews});
 
   @override
   ConsumerState<NewsUploadScreen> createState() => _NewsUploadScreenState();
@@ -23,15 +96,100 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen> {
   final _descriptionController = TextEditingController();
   final _moreController = TextEditingController();
   final _mediaPickerService = MediaPickerService();
+  late final UploadPermissions _permissions;
 
   @override
   void initState() {
     super.initState();
+    final user = ref.read(authViewModelProvider).user;
+    final role = user?.primaryRole.value ?? 'reader';
+    _permissions = UploadPermissions.forRole(role);
+
     ref.read(newsUploadViewModelProvider.notifier).clearData();
-    ref.read(topicViewModelProvider).loadTopics();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(newsUploadViewModelProvider.notifier).loadStates();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // Load topics first and wait for them
+      await ref.read(topicViewModelProvider).loadTopics();
+
+      final vm = ref.read(newsUploadViewModelProvider.notifier);
+      await vm.loadStates();
+
+      if (user != null && widget.prefillNews == null) {
+        await _autoSelectUserLocations(vm, user, role);
+        if (_permissions.limitTopicToYourArea) {
+          _autoSelectYourAreaTopic(vm);
+        }
+      }
+
+      final news = widget.prefillNews;
+      if (news != null) {
+        await _prefillFromExistingNews(vm, news);
+      }
     });
+  }
+
+  /// Auto-select locations based on what the user is assigned to.
+  Future<void> _autoSelectUserLocations(
+    NewsUploadViewModel vm,
+    User user,
+    String role,
+  ) async {
+    if (role == 'admin') return;
+
+    // All non-admin roles: auto-select their state (toggleState loads districts)
+    if (user.stateId != null && !vm.selectedStateIds.contains(user.stateId)) {
+      final state = vm.availableStates.where((s) => s.id == user.stateId).firstOrNull;
+      if (state != null) await vm.toggleState(state);
+    }
+
+    // Auto-select their district (toggleDistrict loads mandals)
+    if (user.districtId != null && !vm.selectedDistrictIds.contains(user.districtId)) {
+      final district = vm.availableDistricts.where((d) => d.id == user.districtId).firstOrNull;
+      if (district != null) await vm.toggleDistrict(district);
+    }
+
+    // Auto-select their mandal
+    if (user.mandalId != null && !vm.selectedMandalIds.contains(user.mandalId)) {
+      final mandal = vm.availableMandals.where((m) => m.id == user.mandalId).firstOrNull;
+      if (mandal != null) vm.toggleMandal(mandal);
+    }
+
+    if (mounted) setState(() {});
+  }
+
+  /// For dist-reporters: auto-select "Your Area" topic.
+  void _autoSelectYourAreaTopic(NewsUploadViewModel vm) {
+    final topics = ref.read(topicViewModelProvider).topics;
+    final yourArea = topics.where(
+      (t) => t.name.toLowerCase() == 'your area' || (t.slug?.toLowerCase() ?? '') == 'your-area',
+    ).firstOrNull;
+    if (yourArea != null && !vm.selectedCategories.any((c) => c.id == yourArea.id)) {
+      ref.read(newsUploadViewModelProvider.notifier).toggleCategory(yourArea);
+    }
+  }
+
+  /// Prefill form from existing news (editing flow).
+  Future<void> _prefillFromExistingNews(NewsUploadViewModel vm, News news) async {
+    final translation = news.getPrimaryTranslation();
+    if (translation != null) {
+      _headlineController.text = translation.title;
+      _descriptionController.text = translation.shortDescription;
+      _moreController.text = translation.content;
+    }
+
+    final allTopics = ref.read(topicViewModelProvider).topics;
+    await vm.prefillFromNews(
+      allTopics: allTopics,
+      topicIds: news.topicLocations.map((l) => l.id).toList(),
+      stateIds: news.stateLocations.map((l) => l.id).toList(),
+      districtIds: news.districtLocations.map((l) => l.id).toList(),
+      mandalIds: news.mandalLocations.map((l) => l.id).toList(),
+      existingMedia: news.media,
+    );
+
+    if (_moreController.text.isNotEmpty) {
+      vm.setIsMoreChecked(true);
+    }
+    if (mounted) setState(() {});
   }
 
   @override
@@ -48,40 +206,62 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen> {
     final topicViewModel = ref.watch(topicViewModelProvider);
     final theme = Theme.of(context);
 
+    // Topics: required only if showTopics is true AND not auto-assigned (limitTopicToYourArea)
+    // Locations: required only if showLocations is true
     final isFormValid =
         _headlineController.text.isNotEmpty &&
         _descriptionController.text.isNotEmpty &&
-        vm.selectedCategories.isNotEmpty &&
-        vm.selectedStateIds.isNotEmpty &&
+        (_permissions.showTopics && !_permissions.limitTopicToYourArea
+            ? vm.selectedCategories.isNotEmpty
+            : true) &&
+        (_permissions.showLocations ? vm.selectedStateIds.isNotEmpty : true) &&
         vm.acceptTerms;
 
-    return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
-      appBar: _buildAppBar(theme),
-      body: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildMediaCard(vm, theme),
-                  const SizedBox(height: 14),
-                  _buildStoryDetailsCard(vm, theme),
-                  const SizedBox(height: 14),
-                  _buildTopicsCard(vm, topicViewModel.topics, theme),
-                  const SizedBox(height: 14),
-                  _buildLocationCard(vm, theme),
-                  const SizedBox(height: 14),
-                  _buildTermsRow(vm, theme),
-                  const SizedBox(height: 20),
-                ],
+    return SafeArea(
+      top: false,
+      left: false,
+      right: false,
+      bottom: true,
+      child: Scaffold(
+        backgroundColor: theme.appBackground,
+        appBar: _buildAppBar(theme),
+        body: Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildMediaCard(vm, theme),
+                    const SizedBox(height: 16),
+                    _buildStoryDetailsCard(vm, theme),
+                    if (_permissions.showTopics) ...[
+                      const SizedBox(height: 16),
+                      _buildTopicsCard(vm, topicViewModel.topics, theme),
+                    ],
+                    if (_permissions.showLocations) ...[
+                      const SizedBox(height: 16),
+                      _buildLocationCard(vm, theme),
+                    ],
+                    if (_permissions.showTopics) ...[
+                      const SizedBox(height: 12),
+                      _buildImportantCheckbox(vm, theme),
+                      const SizedBox(height: 8),
+                      _buildCommentCheckbox(vm, theme),
+                      const SizedBox(height: 8),
+                      _buildShowProfileCheckbox(vm, theme),
+                    ],
+                    const SizedBox(height: 16),
+                    _buildTermsRow(vm, theme),
+                    const SizedBox(height: 24),
+                  ],
+                ),
               ),
             ),
-          ),
-          _buildSendButton(vm, isFormValid, theme),
-        ],
+            _buildSendButton(vm, isFormValid, theme),
+          ],
+        ),
       ),
     );
   }
@@ -89,7 +269,7 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen> {
   // ── AppBar ──────────────────────────────────────────────────────────────────
   AppBar _buildAppBar(ThemeData theme) {
     return AppBar(
-      backgroundColor: theme.scaffoldBackgroundColor,
+      backgroundColor: theme.appBackground,
       elevation: 0,
       surfaceTintColor: Colors.transparent,
       leading: IconButton(
@@ -101,16 +281,16 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen> {
         onPressed: () => Navigator.pop(context),
       ),
       title: Text(
-        'Upload News',
+        widget.prefillNews != null ? 'Edit News' : 'Upload News',
         style: TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
+          fontSize: scaledFontSize(18),
+          fontWeight: FontWeight.w700,
           color: theme.appTextPrimary,
         ),
       ),
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),
-        child: Container(height: 1, color: theme.appDivider),
+        child: Container(height: 0.5, color: theme.appDivider),
       ),
     );
   }
@@ -118,12 +298,21 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen> {
   // ── Section card wrapper ────────────────────────────────────────────────────
   Widget _buildCard({required Widget child}) {
     final theme = Theme.of(context);
+    final isLight = theme.brightness == Brightness.light;
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
         color: theme.appCard,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: theme.appGrey200),
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: isLight
+                ? Colors.black.withValues(alpha: 0.04)
+                : Colors.black.withValues(alpha: 0.2),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       padding: const EdgeInsets.all(16),
       child: child,
@@ -139,18 +328,18 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen> {
     return Row(
       children: [
         Container(
-          padding: const EdgeInsets.all(7),
+          padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: theme.appPrimary.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(9),
+            color: _kAccentLight.withValues(alpha: theme.brightness == Brightness.light ? 1.0 : 0.15),
+            borderRadius: BorderRadius.circular(10),
           ),
-          child: Icon(icon, color: theme.appPrimary, size: 16),
+          child: Icon(icon, color: _kAccent, size: 16),
         ),
         const SizedBox(width: 10),
         Text(
           title,
           style: TextStyle(
-            fontSize: 15,
+            fontSize: scaledFontSize(15),
             fontWeight: FontWeight.w700,
             color: theme.appTextPrimary,
           ),
@@ -168,22 +357,18 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen> {
         children: [
           _buildSectionHeader(theme, Icons.perm_media_rounded, 'Media'),
           const SizedBox(height: 14),
-          if (vm.selectedMedia.isEmpty)
+          if (vm.selectedMedia.isEmpty && vm.existingMedia.isEmpty)
             _buildMediaPlaceholder(theme)
           else
             _buildMediaGrid(vm, theme),
-          if (vm.selectedMedia.isNotEmpty) ...[
+          if (vm.selectedMedia.isNotEmpty || vm.existingMedia.isNotEmpty) ...[
             const SizedBox(height: 10),
             TextButton.icon(
               onPressed: _showMediaPicker,
-              icon: Icon(
-                Icons.add_circle_outline,
-                size: 16,
-                color: theme.appPrimary,
-              ),
-              label: Text(
+              icon: const Icon(Icons.add_circle_outline, size: 16, color: _kAccent),
+              label:  Text(
                 'Add more',
-                style: TextStyle(color: theme.appPrimary, fontSize: 13),
+                style: TextStyle(color: _kAccent, fontSize: scaledFontSize(13), fontWeight: FontWeight.w600),
               ),
               style: TextButton.styleFrom(
                 padding: EdgeInsets.zero,
@@ -202,24 +387,35 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen> {
       onTap: _showMediaPicker,
       borderRadius: BorderRadius.circular(12),
       child: Container(
-        height: 120,
+        height: 130,
         decoration: BoxDecoration(
-          border: Border.all(color: theme.appGrey300, style: BorderStyle.solid),
           borderRadius: BorderRadius.circular(12),
           color: theme.appGrey50,
+          border: Border.all(
+            color: theme.appGrey200,
+            style: BorderStyle.solid,
+          ),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.add_photo_alternate_outlined,
-              size: 36,
-              color: theme.appGrey400,
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: _kAccentLight.withValues(alpha: theme.brightness == Brightness.light ? 1.0 : 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.add_photo_alternate_outlined, size: 28, color: _kAccent),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             Text(
-              'Tap to add Photos / Video / Audio',
-              style: TextStyle(fontSize: 13, color: theme.appTextSecondary),
+              'Tap to add Photos, Video or Audio',
+              style: TextStyle(fontSize: scaledFontSize(13), fontWeight: FontWeight.w500, color: theme.appTextSecondary),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Supports JPG, PNG, MP4, MP3',
+              style: TextStyle(fontSize: scaledFontSize(11), color: theme.appTextLight),
             ),
           ],
         ),
@@ -228,24 +424,82 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen> {
   }
 
   Widget _buildMediaGrid(NewsUploadViewModel vm, ThemeData theme) {
+    final existingCount = vm.existingMedia.length;
+    final totalCount = existingCount + vm.selectedMedia.length;
+
     return SizedBox(
       height: 110,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        itemCount: vm.selectedMedia.length,
+        itemCount: totalCount,
         separatorBuilder: (_, __) => const SizedBox(width: 8),
         itemBuilder: (context, index) {
-          final file = vm.selectedMedia[index];
-          final ext = file.path.toLowerCase().split('.').last;
-          final isImage = [
-            'jpg',
-            'jpeg',
-            'png',
-            'gif',
-            'bmp',
-            'webp',
-          ].contains(ext);
-          final isVideo = ['mp4', 'mov', 'avi', 'mkv', 'wmv'].contains(ext);
+          // Existing network media first, then local files
+          if (index < existingCount) {
+            final media = vm.existingMedia[index];
+            final isImage = media.type == 'image';
+            final isVideo = media.type == 'video';
+
+            return Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: SizedBox(
+                    width: 100,
+                    height: 110,
+                    child: isImage
+                        ? CachedImageWidget(
+                            imageUrl: media.fileUrl,
+                            fit: BoxFit.cover,
+                          )
+                        : Container(
+                            color: theme.appGrey100,
+                            child: Icon(
+                              isVideo
+                                  ? Icons.video_file_rounded
+                                  : Icons.audio_file_rounded,
+                              size: 40,
+                              color: theme.appGrey400,
+                            ),
+                          ),
+                  ),
+                ),
+                Positioned(
+                  top: 4,
+                  right: 4,
+                  child: GestureDetector(
+                    onTap: () => ref
+                        .read(newsUploadViewModelProvider.notifier)
+                        .removeExistingMedia(index),
+                    child: Container(
+                      width: 22,
+                      height: 22,
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.55),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.close,
+                        size: 13,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          }
+
+          // Local file media
+          final fileIndex = index - existingCount;
+          final file = vm.selectedMedia[fileIndex];
+          final pathLower = file.path.toLowerCase();
+          final ext = pathLower.contains('.') ? pathLower.split('.').last : '';
+          const videoExts = ['mp4', 'mov', 'avi', 'mkv', 'wmv', 'webm'];
+          final isVideo = videoExts.contains(ext);
+          // Default to image if not a known video extension
+          // (handles image_picker cache files with no extension)
+          final isImage = !isVideo;
 
           return Stack(
             children: [
@@ -274,12 +528,12 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen> {
                 child: GestureDetector(
                   onTap: () => ref
                       .read(newsUploadViewModelProvider.notifier)
-                      .removeMedia(index),
+                      .removeMedia(fileIndex),
                   child: Container(
                     width: 22,
                     height: 22,
-                    decoration: const BoxDecoration(
-                      color: Colors.red,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.55),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
@@ -312,7 +566,7 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen> {
             'Headline',
             trailing: Text(
               '${_headlineController.text.length}/100',
-              style: TextStyle(fontSize: 12, color: theme.appTextSecondary),
+              style: TextStyle(fontSize: scaledFontSize(12), color: theme.appTextLight),
             ),
           ),
           const SizedBox(height: 6),
@@ -353,7 +607,7 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen> {
                     onChanged: (v) => ref
                         .read(newsUploadViewModelProvider.notifier)
                         .setIsMoreChecked(v),
-                    activeColor: theme.appPrimary,
+                    activeColor: _kAccent,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(4),
                     ),
@@ -361,11 +615,11 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen> {
                     visualDensity: VisualDensity.compact,
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 8), 
                 Text(
                   'Add full article content',
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: scaledFontSize(13),
                     fontWeight: FontWeight.w600,
                     color: theme.appTextPrimary,
                   ),
@@ -393,7 +647,7 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen> {
         Text(
           label,
           style: TextStyle(
-            fontSize: 13,
+            fontSize: scaledFontSize(13),
             fontWeight: FontWeight.w600,
             color: theme.appTextSecondary,
           ),
@@ -416,28 +670,28 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen> {
       maxLines: maxLines,
       maxLength: maxLength,
       onChanged: onChanged,
-      style: TextStyle(fontSize: 14, color: theme.appTextPrimary),
+      style: TextStyle(fontSize: scaledFontSize(14), color: theme.appTextPrimary),
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: TextStyle(color: theme.appTextLight, fontSize: 14),
+        hintStyle: TextStyle(color: theme.appTextLight, fontSize: scaledFontSize(14)),
         counterText: '',
         filled: true,
         fillColor: theme.appGrey50,
         contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 11,
+          horizontal: 14,
+          vertical: 12,
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: theme.appGrey200),
+          borderSide: BorderSide(color: theme.appGrey300, width: 1),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: theme.appGrey200),
+          borderSide: BorderSide(color: theme.appGrey300, width: 1),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: theme.appPrimary, width: 1.5),
+          borderSide: const BorderSide(color: _kAccent, width: 1.5),
         ),
       ),
     );
@@ -449,6 +703,13 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen> {
     List<Topic> topics,
     ThemeData theme,
   ) {
+    // For dist-reporters: only show "Your Area" topic
+    final availableTopics = _permissions.limitTopicToYourArea
+        ? topics.where((t) =>
+            t.name.toLowerCase() == 'your area' ||
+            (t.slug?.toLowerCase() ?? '') == 'your-area').toList()
+        : topics;
+
     final count = vm.selectedCategories.length;
     return _buildCard(
       child: Column(
@@ -458,7 +719,7 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen> {
             theme,
             Icons.tag_rounded,
             'Topics',
-            trailing: count > 0 ? _buildCountBadge(theme, count) : null,
+            trailing: count > 0 ? _buildCountBadge(count) : null,
           ),
           if (vm.selectedCategories.isNotEmpty) ...[
             const SizedBox(height: 10),
@@ -470,28 +731,35 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen> {
                     (t) => _buildSelectedChip(
                       theme,
                       t.name,
-                      onRemove: () => ref
-                          .read(newsUploadViewModelProvider.notifier)
-                          .toggleCategory(t),
+                      onRemove: _permissions.limitTopicToYourArea
+                          ? null // Can't remove the only allowed topic
+                          : () => ref
+                              .read(newsUploadViewModelProvider.notifier)
+                              .toggleCategory(t),
                     ),
                   )
                   .toList(),
             ),
           ],
-          const SizedBox(height: 12),
-          _MultiSelectList<Topic>(
-            key: const ValueKey('topics'),
-            items: topics,
-            selectedIds: vm.selectedCategories.map((t) => t.id).toList(),
-            getName: (t) => t.name,
-            getId: (t) => t.id,
-            onToggle: (t) async => ref
-                .read(newsUploadViewModelProvider.notifier)
-                .toggleCategory(t),
-            searchHint: 'Search topics...',
-            emptyText: 'No topics available',
-            theme: theme,
-          ),
+          if (!_permissions.limitTopicToYourArea) ...[
+            const SizedBox(height: 12),
+            _MultiSelectList<Topic>(
+              key: const ValueKey('topics'),
+              items: availableTopics,
+              selectedIds: vm.selectedCategories.map((t) => t.id).toList(),
+              getName: (t) => t.name,
+              getId: (t) => t.id,
+              onToggle: (t) async => ref
+                  .read(newsUploadViewModelProvider.notifier)
+                  .toggleCategory(t),
+              searchHint: 'Search topics...',
+              emptyText: 'No topics available',
+              theme: theme,
+            ),
+          ] else if (vm.selectedCategories.isEmpty) ...[
+            const SizedBox(height: 10),
+            _buildLockedLocationInfo(theme, '"Your Area" will be auto-assigned'),
+          ],
         ],
       ),
     );
@@ -499,6 +767,7 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen> {
 
   // ── Location card ───────────────────────────────────────────────────────────
   Widget _buildLocationCard(NewsUploadViewModel vm, ThemeData theme) {
+
     return _buildCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -512,7 +781,6 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen> {
                     vm.selectedDistrictIds.isNotEmpty ||
                     vm.selectedMandalIds.isNotEmpty)
                 ? _buildCountBadge(
-                    theme,
                     vm.selectedStateIds.length +
                         vm.selectedDistrictIds.length +
                         vm.selectedMandalIds.length,
@@ -528,27 +796,30 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen> {
             vm.selectedStates.map((s) => s.name).toList(),
           ),
           const SizedBox(height: 8),
-          _buildLocationSelector<location_models.State>(
-            key: const ValueKey('states'),
-            theme: theme,
-            icon: Icons.map_rounded,
-            title: 'Select States',
-            items: vm.availableStates,
-            selectedIds: vm.selectedStateIds,
-            isLoading: vm.isLoadingStates,
-            error: vm.statesError,
-            onRetry: () => ref
-                .read(newsUploadViewModelProvider.notifier)
-                .retryLoadStates(),
-            onToggle: (s) =>
-                ref.read(newsUploadViewModelProvider.notifier).toggleState(s),
-            getName: (s) => s.name,
-            getId: (s) => s.id,
-            searchHint: 'Search states...',
-            disabledMessage: null,
-          ),
+          if (_permissions.canSelectStates)
+            _buildLocationSelector<location_models.State>(
+              key: const ValueKey('states'),
+              theme: theme,
+              icon: Icons.map_rounded,
+              title: 'Select States',
+              items: vm.availableStates,
+              selectedIds: vm.selectedStateIds,
+              isLoading: vm.isLoadingStates,
+              error: vm.statesError,
+              onRetry: () => ref
+                  .read(newsUploadViewModelProvider.notifier)
+                  .retryLoadStates(),
+              onToggle: (s) =>
+                  ref.read(newsUploadViewModelProvider.notifier).toggleState(s),
+              getName: (s) => s.name,
+              getId: (s) => s.id,
+              searchHint: 'Search states...',
+              disabledMessage: null,
+            )
+          else
+            _buildLockedLocationInfo(theme, 'State assigned by admin'),
 
-          // Districts — only when states selected
+          // Districts
           if (vm.selectedStateIds.isNotEmpty) ...[
             const SizedBox(height: 14),
             _buildLocationRow(
@@ -557,27 +828,47 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen> {
               vm.selectedDistricts.map((d) => d.name).toList(),
             ),
             const SizedBox(height: 8),
-            _buildLocationSelector<District>(
-              key: const ValueKey('districts'),
-              theme: theme,
-              icon: Icons.location_city_rounded,
-              title: 'Select Districts',
-              items: vm.availableDistricts,
-              selectedIds: vm.selectedDistrictIds,
-              isLoading: vm.isLoadingAnyDistricts,
-              error: null,
-              onRetry: null,
-              onToggle: (d) => ref
-                  .read(newsUploadViewModelProvider.notifier)
-                  .toggleDistrict(d),
-              getName: (d) => d.name,
-              getId: (d) => d.id,
-              searchHint: 'Search districts...',
-              disabledMessage: null,
-            ),
+            if (_permissions.canSelectDistricts) ...[
+              _buildSelectAllButton(
+                theme: theme,
+                label: 'Select All Districts',
+                isAllSelected: vm.availableDistricts.isNotEmpty &&
+                    vm.availableDistricts.every((d) => vm.selectedDistrictIds.contains(d.id)),
+                onPressed: () {
+                  final notifier = ref.read(newsUploadViewModelProvider.notifier);
+                  final allSelected = vm.availableDistricts.every(
+                      (d) => vm.selectedDistrictIds.contains(d.id));
+                  if (allSelected) {
+                    notifier.deselectAllDistricts(vm.availableDistricts);
+                  } else {
+                    notifier.selectAllDistricts(vm.availableDistricts);
+                  }
+                },
+              ),
+              const SizedBox(height: 8),
+              _buildLocationSelector<District>(
+                key: const ValueKey('districts'),
+                theme: theme,
+                icon: Icons.location_city_rounded,
+                title: 'Select Districts',
+                items: vm.availableDistricts,
+                selectedIds: vm.selectedDistrictIds,
+                isLoading: vm.isLoadingAnyDistricts,
+                error: null,
+                onRetry: null,
+                onToggle: (d) => ref
+                    .read(newsUploadViewModelProvider.notifier)
+                    .toggleDistrict(d),
+                getName: (d) => d.name,
+                getId: (d) => d.id,
+                searchHint: 'Search districts...',
+                disabledMessage: null,
+              ),
+            ] else
+              _buildLockedLocationInfo(theme, 'District assigned by admin'),
           ],
 
-          // Mandals — only when districts selected
+          // Mandals
           if (vm.selectedDistrictIds.isNotEmpty) ...[
             const SizedBox(height: 14),
             _buildLocationRow(
@@ -586,26 +877,111 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen> {
               vm.selectedMandals.map((m) => m.name).toList(),
             ),
             const SizedBox(height: 8),
-            _buildLocationSelector<Mandal>(
-              key: const ValueKey('mandals'),
-              theme: theme,
-              icon: Icons.holiday_village_rounded,
-              title: 'Select Mandals',
-              items: vm.availableMandals,
-              selectedIds: vm.selectedMandalIds,
-              isLoading: vm.isLoadingAnyMandals,
-              error: null,
-              onRetry: null,
-              onToggle: (m) async => ref
-                  .read(newsUploadViewModelProvider.notifier)
-                  .toggleMandal(m),
-              getName: (m) => m.name,
-              getId: (m) => m.id,
-              searchHint: 'Search mandals...',
-              disabledMessage: null,
-            ),
+            if (_permissions.canSelectMandals) ...[
+              _buildSelectAllButton(
+                theme: theme,
+                label: 'Select All Mandals',
+                isAllSelected: vm.availableMandals.isNotEmpty &&
+                    vm.availableMandals.every((m) => vm.selectedMandalIds.contains(m.id)),
+                onPressed: () {
+                  final notifier = ref.read(newsUploadViewModelProvider.notifier);
+                  final allSelected = vm.availableMandals.every(
+                      (m) => vm.selectedMandalIds.contains(m.id));
+                  for (final m in vm.availableMandals) {
+                    if (allSelected && vm.selectedMandalIds.contains(m.id)) {
+                      notifier.toggleMandal(m);
+                    } else if (!allSelected && !vm.selectedMandalIds.contains(m.id)) {
+                      notifier.toggleMandal(m);
+                    }
+                  }
+                },
+              ),
+              const SizedBox(height: 8),
+              _buildLocationSelector<Mandal>(
+                key: const ValueKey('mandals'),
+                theme: theme,
+                icon: Icons.holiday_village_rounded,
+                title: 'Select Mandals',
+                items: vm.availableMandals,
+                selectedIds: vm.selectedMandalIds,
+                isLoading: vm.isLoadingAnyMandals,
+                error: null,
+                onRetry: null,
+                onToggle: (m) async => ref
+                    .read(newsUploadViewModelProvider.notifier)
+                    .toggleMandal(m),
+                getName: (m) => m.name,
+                getId: (m) => m.id,
+                searchHint: 'Search mandals...',
+                disabledMessage: null,
+              ),
+            ] else
+              _buildLockedLocationInfo(theme, 'Mandal assigned by admin'),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildLockedLocationInfo(ThemeData theme, String message) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: theme.appGrey100,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.lock_outline, size: 16, color: theme.appTextLight),
+          const SizedBox(width: 8),
+          Text(
+            message,
+            style: TextStyle(
+              fontSize: scaledFontSize(12),
+              color: theme.appTextLight,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSelectAllButton({
+    required ThemeData theme,
+    required String label,
+    required bool isAllSelected,
+    required VoidCallback onPressed,
+  }) {
+    return GestureDetector(
+      onTap: onPressed,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isAllSelected ? _kAccentLight : theme.cardColor,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isAllSelected ? _kAccent : theme.dividerColor,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isAllSelected ? Icons.check_box : Icons.check_box_outline_blank,
+              size: 18,
+              color: isAllSelected ? _kAccent : theme.appTextLight,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              isAllSelected ? 'Deselect All' : label,
+              style: TextStyle(
+                fontSize: scaledFontSize(12),
+                fontWeight: FontWeight.w600,
+                color: isAllSelected ? _kAccent : theme.appTextSecondary,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -617,7 +993,7 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen> {
         Text(
           '$label: ',
           style: TextStyle(
-            fontSize: 13,
+            fontSize: scaledFontSize(13),
             fontWeight: FontWeight.w600,
             color: theme.appTextSecondary,
           ),
@@ -626,7 +1002,7 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen> {
           child: names.isEmpty
               ? Text(
                   'None selected',
-                  style: TextStyle(fontSize: 13, color: theme.appTextLight),
+                  style: TextStyle(fontSize: scaledFontSize(13), color: theme.appTextLight),
                 )
               : Wrap(
                   spacing: 4,
@@ -674,49 +1050,162 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen> {
     );
   }
 
-  // ── Terms row ───────────────────────────────────────────────────────────────
-  Widget _buildTermsRow(NewsUploadViewModel vm, ThemeData theme) {
-    return InkWell(
-      onTap: () => ref
-          .read(newsUploadViewModelProvider.notifier)
-          .setAcceptTerms(!vm.acceptTerms),
-      borderRadius: BorderRadius.circular(8),
+  bool _isImportant = false;
+  bool _isComment = true;
+  bool _showProfile = true;
+
+  Widget _buildImportantCheckbox(NewsUploadViewModel vm, ThemeData theme) {
+    return GestureDetector(
+      onTap: () => setState(() => _isImportant = !_isImportant),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 5.0),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             SizedBox(
               width: 22,
               height: 22,
               child: Checkbox(
-                value: vm.acceptTerms,
-                onChanged: (v) => ref
-                    .read(newsUploadViewModelProvider.notifier)
-                    .setAcceptTerms(v ?? false),
-                activeColor: theme.appPrimary,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                visualDensity: VisualDensity.compact,
+                value: _isImportant,
+                onChanged: (v) => setState(() => _isImportant = v ?? false),
+                activeColor: const Color(0xFFE8A000),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                side: const BorderSide(color: Color(0xFFCCCCCC)),
               ),
             ),
             const SizedBox(width: 10),
+            Icon(Icons.star_rounded, size: 18, color: _isImportant ? const Color(0xFFE8A000) : const Color(0xFFCCCCCC)),
+            const SizedBox(width: 6),
             Text(
-              'I accept the ',
-              style: TextStyle(fontSize: 14, color: theme.appTextSecondary),
-            ),
-            Text(
-              'terms and conditions',
+              'Mark as Important News',
               style: TextStyle(
-                fontSize: 14,
-                color: theme.appPrimary,
-                fontWeight: FontWeight.w600,
-                decoration: TextDecoration.underline,
+                fontSize: scaledFontSize(13),
+                color: _isImportant ? const Color(0xFF333333) : const Color(0xFF999999),
+                fontWeight: _isImportant ? FontWeight.w600 : FontWeight.normal,
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCommentCheckbox(NewsUploadViewModel vm, ThemeData theme) {
+    return GestureDetector(
+      onTap: () => setState(() => _isComment = !_isComment),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 5.0),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 22,
+              height: 22,
+              child: Checkbox(
+                value: _isComment,
+                onChanged: (v) => setState(() => _isComment = v ?? true),
+                activeColor: _kAccent,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                side: const BorderSide(color: Color(0xFFCCCCCC)),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Icon(Icons.comment_outlined, size: 18, color: _isComment ? _kAccent : const Color(0xFFCCCCCC)),
+            const SizedBox(width: 6),
+            Text(
+              'Allow Comments',
+              style: TextStyle(
+                fontSize: scaledFontSize(13),
+                color: _isComment ? const Color(0xFF333333) : const Color(0xFF999999),
+                fontWeight: _isComment ? FontWeight.w600 : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildShowProfileCheckbox(NewsUploadViewModel vm, ThemeData theme) {
+    return GestureDetector(
+      onTap: () => setState(() => _showProfile = !_showProfile),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 5.0),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 22,
+              height: 22,
+              child: Checkbox(
+                value: _showProfile,
+                onChanged: (v) => setState(() => _showProfile = v ?? true),
+                activeColor: _kAccent,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                side: const BorderSide(color: Color(0xFFCCCCCC)),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Icon(Icons.person_outline, size: 18, color: _showProfile ? _kAccent : const Color(0xFFCCCCCC)),
+            const SizedBox(width: 6),
+            Text(
+              'Show Author Profile',
+              style: TextStyle(
+                fontSize: scaledFontSize(13),
+                color: _showProfile ? const Color(0xFF333333) : const Color(0xFF999999),
+                fontWeight: _showProfile ? FontWeight.w600 : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Terms row ───────────────────────────────────────────────────────────────
+  Widget _buildTermsRow(NewsUploadViewModel vm, ThemeData theme) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: InkWell(
+        onTap: () => ref
+            .read(newsUploadViewModelProvider.notifier)
+            .setAcceptTerms(!vm.acceptTerms),
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              SizedBox(
+                width: 22,
+                height: 22,
+                child: Checkbox(
+                  value: vm.acceptTerms,
+                  onChanged: (v) => ref
+                      .read(newsUploadViewModelProvider.notifier)
+                      .setAcceptTerms(v ?? false),
+                  activeColor: _kAccent,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                'I accept the ',
+                style: TextStyle(fontSize: scaledFontSize(14), color: theme.appTextSecondary),
+              ),
+               Text(
+                'terms and conditions',
+                style: TextStyle(
+                  fontSize: scaledFontSize(14),
+                  color: _kAccent,
+                  fontWeight: FontWeight.w600,
+                  decoration: TextDecoration.underline,
+                  decorationColor: _kAccent,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -735,18 +1224,12 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen> {
         child: SizedBox(
           width: double.infinity,
           height: 50,
-          child: ElevatedButton(
+          child: ElevatedButton.icon(
             onPressed: isFormValid && !vm.isUploading ? _handleSendNews : null,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF4CAF50),
-              disabledBackgroundColor: theme.appGrey300,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-              elevation: 0,
-            ),
-            child: vm.isUploading
+            icon: vm.isUploading
+                ? const SizedBox.shrink()
+                : const Icon(Icons.send_rounded, size: 18),
+            label: vm.isUploading
                 ? const SizedBox(
                     width: 22,
                     height: 22,
@@ -755,14 +1238,24 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen> {
                       valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                     ),
                   )
-                : Text(
-                    'SEND',
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.2,
+                :  Text(
+                    'Publish Story',
+                    style: TextStyle(
+                      fontSize: scaledFontSize(15),
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5,
                     ),
                   ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _kAccent,
+              disabledBackgroundColor: theme.appGrey300,
+              foregroundColor: Colors.white,
+              disabledForegroundColor: Colors.white60,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+              elevation: 0,
+            ),
           ),
         ),
       ),
@@ -778,18 +1271,17 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: theme.appPrimary.withValues(alpha: 0.12),
+        color: _kAccentLight.withValues(alpha: theme.brightness == Brightness.light ? 1.0 : 0.15),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: theme.appPrimary.withValues(alpha: 0.3)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
             label,
-            style: TextStyle(
-              fontSize: 12,
-              color: theme.appPrimary,
+            style:  TextStyle(
+              fontSize: scaledFontSize(12),
+              color: _kAccent,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -797,10 +1289,10 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen> {
             const SizedBox(width: 4),
             GestureDetector(
               onTap: onRemove,
-              child: Icon(
+              child: const Icon(
                 Icons.close_rounded,
                 size: 14,
-                color: theme.appPrimary,
+                color: _kAccent,
               ),
             ),
           ],
@@ -813,31 +1305,31 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: theme.appSelectionBackground,
+        color: _kAccentLight.withValues(alpha: theme.brightness == Brightness.light ? 1.0 : 0.15),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
         label,
-        style: TextStyle(
-          fontSize: 11,
-          color: theme.appSelectionPrimary,
+        style:  TextStyle(
+          fontSize: scaledFontSize(11),
+          color: _kAccent,
           fontWeight: FontWeight.w500,
         ),
       ),
     );
   }
 
-  Widget _buildCountBadge(ThemeData theme, int count) {
+  Widget _buildCountBadge(int count) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: theme.appPrimary,
+        color: _kAccent,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
         '$count',
-        style: const TextStyle(
-          fontSize: 12,
+        style:  TextStyle(
+          fontSize: scaledFontSize(12),
           color: Colors.white,
           fontWeight: FontWeight.bold,
         ),
@@ -867,49 +1359,87 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen> {
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-            ListTile(
-              leading: Icon(
-                Icons.photo_library_rounded,
-                color: theme.appPrimary,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Text(
+                'Add Media',
+                style: TextStyle(
+                  fontSize: scaledFontSize(16),
+                  fontWeight: FontWeight.w700,
+                  color: theme.appTextPrimary,
+                ),
               ),
-              title: Text(
-                'Choose Photos',
-                style: TextStyle(color: theme.appTextPrimary),
-              ),
+            ),
+            _buildMediaOption(
+              theme,
+              icon: Icons.photo_library_rounded,
+              color: const Color(0xFF8B5CF6),
+              title: 'Choose Photos',
+              subtitle: 'Select from gallery',
               onTap: () {
                 Navigator.pop(context);
                 _pickPhotos();
               },
             ),
-            ListTile(
-              leading: Icon(
-                Icons.video_library_rounded,
-                color: theme.appPrimary,
-              ),
-              title: Text(
-                'Choose Video',
-                style: TextStyle(color: theme.appTextPrimary),
-              ),
+            _buildMediaOption(
+              theme,
+              icon: Icons.video_library_rounded,
+              color: const Color(0xFFEC4899),
+              title: 'Choose Video',
+              subtitle: 'Select a video clip',
               onTap: () {
                 Navigator.pop(context);
                 _pickVideo();
               },
             ),
-            ListTile(
-              leading: Icon(Icons.camera_alt_rounded, color: theme.appPrimary),
-              title: Text(
-                'Take Photo',
-                style: TextStyle(color: theme.appTextPrimary),
-              ),
+            _buildMediaOption(
+              theme,
+              icon: Icons.camera_alt_rounded,
+              color: const Color(0xFF0EA5E9),
+              title: 'Take Photo',
+              subtitle: 'Use your camera',
               onTap: () {
                 Navigator.pop(context);
                 _pickMediaFromCamera();
               },
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildMediaOption(
+    ThemeData theme, {
+    required IconData icon,
+    required Color color,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return ListTile(
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(icon, color: color, size: 22),
+      ),
+      title: Text(
+        title,
+        style: TextStyle(
+          color: theme.appTextPrimary,
+          fontWeight: FontWeight.w600,
+          fontSize: scaledFontSize(14),
+        ),
+      ),
+      subtitle: Text(
+        subtitle,
+        style: TextStyle(color: theme.appTextLight, fontSize: scaledFontSize(12)),
+      ),
+      onTap: onTap,
     );
   }
 
@@ -960,32 +1490,65 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen> {
 
   void _handleSendNews() async {
     final vm = ref.read(newsUploadViewModelProvider);
+    final notifier = ref.read(newsUploadViewModelProvider.notifier);
+
+    // For dist-reporters: ensure "Your Area" topic is selected before uploading
+    if (_permissions.limitTopicToYourArea && notifier.selectedCategories.isEmpty) {
+      _autoSelectYourAreaTopic(notifier);
+    }
+
+    final user = ref.read(authViewModelProvider).user;
+    final role = user?.primaryRole.value ?? 'reader';
+
+    // For reader/reporter: ensure all locations are set from their assigned location
+    if (!_permissions.showLocations && user != null) {
+      if (notifier.selectedStateIds.isEmpty ||
+          notifier.selectedDistrictIds.isEmpty ||
+          notifier.selectedMandalIds.isEmpty) {
+        await _autoSelectUserLocations(notifier, user, role);
+      }
+    }
+
+    // Admin, sub_admin, dist-reporter publish directly; others go to pending
+    final uploadStatus = (role == 'admin' || role == 'subadmin' || role == 'dist-reporter')
+        ? 'published'
+        : 'pending';
+
     final success = await vm.uploadNews(
       headline: _headlineController.text,
       description: _descriptionController.text,
       content: _moreController.text,
-      categories: ref
-          .read(newsUploadViewModelProvider.notifier)
-          .selectedCategories,
-      mediaFiles: ref.read(newsUploadViewModelProvider.notifier).selectedMedia,
+      categories: notifier.selectedCategories,
+      mediaFiles: notifier.selectedMedia,
+      editNewsId: widget.prefillNews?.id,
+      status: uploadStatus,
+      skipLocationValidation: !_permissions.showLocations,
+      isImportant: _isImportant,
+      isComment: _isComment,
+      showProfile: _showProfile,
     );
 
     if (!mounted) return;
 
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('News uploaded successfully!'),
-          backgroundColor: Colors.green,
+        SnackBar(
+          content: Text(widget.prefillNews != null
+              ? 'News updated successfully!'
+              : 'News uploaded successfully!'),
+          backgroundColor: _kSuccess,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       );
-      // Navigator.pop(context);
       ref.read(homeViewModelProvider.notifier).loadNewsData();
+      Navigator.pop(context);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(vm.error ?? 'Failed to upload news'),
-          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       );
     }
@@ -1059,8 +1622,8 @@ class _MultiSelectListState<T> extends State<_MultiSelectList<T>> {
         color: theme.appGrey50,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: selectedCount > 0
-              ? theme.appPrimary.withValues(alpha: 0.4)
+          color: _expanded
+              ? _kAccent.withValues(alpha: 0.3)
               : theme.appGrey200,
         ),
       ),
@@ -1080,7 +1643,7 @@ class _MultiSelectListState<T> extends State<_MultiSelectList<T>> {
                       widget.leadingIcon,
                       size: 17,
                       color: selectedCount > 0
-                          ? theme.appPrimary
+                          ? _kAccent
                           : theme.appTextSecondary,
                     ),
                   if (widget.leadingIcon != null) const SizedBox(width: 8),
@@ -1088,23 +1651,21 @@ class _MultiSelectListState<T> extends State<_MultiSelectList<T>> {
                     child: Text(
                       widget.selectorTitle ?? widget.searchHint,
                       style: TextStyle(
-                        fontSize: 13,
+                        fontSize: scaledFontSize(13),
                         fontWeight: FontWeight.w600,
                         color: selectedCount > 0
-                            ? theme.appPrimary
+                            ? _kAccent
                             : theme.appTextSecondary,
                       ),
                     ),
                   ),
                   if (widget.isLoading)
-                    SizedBox(
+                    const SizedBox(
                       width: 16,
                       height: 16,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          theme.appPrimary,
-                        ),
+                        valueColor: AlwaysStoppedAnimation<Color>(_kAccent),
                       ),
                     )
                   else ...[
@@ -1116,13 +1677,13 @@ class _MultiSelectListState<T> extends State<_MultiSelectList<T>> {
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: theme.appPrimary,
+                          color: _kAccent,
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
                           '$selectedCount',
-                          style: const TextStyle(
-                            fontSize: 11,
+                          style:  TextStyle(
+                            fontSize: scaledFontSize(11),
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
                           ),
@@ -1151,10 +1712,10 @@ class _MultiSelectListState<T> extends State<_MultiSelectList<T>> {
               child: TextField(
                 controller: _searchController,
                 onChanged: (v) => setState(() => _search = v),
-                style: TextStyle(fontSize: 13, color: theme.appTextPrimary),
+                style: TextStyle(fontSize: scaledFontSize(13), color: theme.appTextPrimary),
                 decoration: InputDecoration(
                   hintText: widget.searchHint,
-                  hintStyle: TextStyle(color: theme.appTextLight, fontSize: 13),
+                  hintStyle: TextStyle(color: theme.appTextLight, fontSize: scaledFontSize(13)),
                   prefixIcon: Icon(
                     Icons.search_rounded,
                     size: 18,
@@ -1168,15 +1729,15 @@ class _MultiSelectListState<T> extends State<_MultiSelectList<T>> {
                   ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: theme.appGrey200),
+                    borderSide: BorderSide(color: theme.appGrey300, width: 1),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: theme.appGrey200),
+                    borderSide: BorderSide(color: theme.appGrey300, width: 1),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: theme.appPrimary, width: 1.5),
+                    borderSide: const BorderSide(color: _kAccent, width: 1.5),
                   ),
                   isDense: true,
                 ),
@@ -1189,18 +1750,18 @@ class _MultiSelectListState<T> extends State<_MultiSelectList<T>> {
                 padding: const EdgeInsets.all(12),
                 child: Row(
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.error_outline,
-                      color: theme.appErrorMedium,
+                      color: Color(0xFFEF4444),
                       size: 16,
                     ),
                     const SizedBox(width: 6),
-                    Expanded(
+                     Expanded(
                       child: Text(
                         'Failed to load data',
                         style: TextStyle(
-                          fontSize: 13,
-                          color: theme.appErrorMedium,
+                          fontSize: scaledFontSize(13),
+                          color: Color(0xFFEF4444),
                         ),
                       ),
                     ),
@@ -1211,11 +1772,12 @@ class _MultiSelectListState<T> extends State<_MultiSelectList<T>> {
                           minimumSize: const Size(60, 30),
                           padding: EdgeInsets.zero,
                         ),
-                        child: Text(
+                        child:  Text(
                           'Retry',
                           style: TextStyle(
-                            color: theme.appPrimary,
-                            fontSize: 13,
+                            color: _kAccent,
+                            fontSize: scaledFontSize(13),
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ),
@@ -1224,12 +1786,12 @@ class _MultiSelectListState<T> extends State<_MultiSelectList<T>> {
               )
             // Loading state
             else if (widget.isLoading)
-              Padding(
-                padding: const EdgeInsets.all(20),
+              const Padding(
+                padding: EdgeInsets.all(20),
                 child: Center(
                   child: CircularProgressIndicator(
                     strokeWidth: 2.5,
-                    valueColor: AlwaysStoppedAnimation<Color>(theme.appPrimary),
+                    valueColor: AlwaysStoppedAnimation<Color>(_kAccent),
                   ),
                 ),
               )
@@ -1243,7 +1805,7 @@ class _MultiSelectListState<T> extends State<_MultiSelectList<T>> {
                         ? 'No results for "$_search"'
                         : widget.emptyText,
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: scaledFontSize(13),
                       color: theme.appTextSecondary,
                     ),
                   ),
@@ -1277,7 +1839,7 @@ class _MultiSelectListState<T> extends State<_MultiSelectList<T>> {
                             Checkbox(
                               value: isSelected,
                               onChanged: (_) => widget.onToggle(item),
-                              activeColor: theme.appPrimary,
+                              activeColor: _kAccent,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(4),
                               ),
@@ -1290,9 +1852,9 @@ class _MultiSelectListState<T> extends State<_MultiSelectList<T>> {
                               child: Text(
                                 name,
                                 style: TextStyle(
-                                  fontSize: 13,
+                                  fontSize: scaledFontSize(13),
                                   color: isSelected
-                                      ? theme.appPrimary
+                                      ? _kAccent
                                       : theme.appTextPrimary,
                                   fontWeight: isSelected
                                       ? FontWeight.w600
@@ -1301,10 +1863,10 @@ class _MultiSelectListState<T> extends State<_MultiSelectList<T>> {
                               ),
                             ),
                             if (isSelected)
-                              Icon(
+                              const Icon(
                                 Icons.check_circle_rounded,
                                 size: 16,
-                                color: theme.appPrimary,
+                                color: _kAccent,
                               ),
                           ],
                         ),

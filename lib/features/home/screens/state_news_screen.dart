@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_font_sizes.dart';
-import '../../../shared/widgets/auto_scaled_text.dart';
 
 class StateNewsScreen extends ConsumerWidget {
   const StateNewsScreen({super.key});
@@ -13,7 +12,7 @@ class StateNewsScreen extends ConsumerWidget {
       appBar: AppBar(
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         elevation: 0,
-        title: AutoScaledText(
+        title: Text(
           'State News',
           style: TextStyle(
             fontSize: appFontSizeHeader,
@@ -24,7 +23,7 @@ class StateNewsScreen extends ConsumerWidget {
         centerTitle: true,
       ),
       body: Center(
-        child: AutoScaledText(
+        child: Text(
           'State News Screen',
           style: TextStyle(
             fontSize: appFontSizeTitle,

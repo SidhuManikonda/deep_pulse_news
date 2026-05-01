@@ -57,9 +57,11 @@ class HomeViewModel extends ChangeNotifier {
   List<News> _filteredNewsItems = []; // Filtered news for current tab
   bool _hasMoreNews = true;
   bool _isLoadingMore = false;
+  String? _nextCursor; // Cursor for pagination
 
   // Topics data
-  List<Topic> _topics = [];
+  List<Topic> _allTopics = []; // Full list from API (includes "Your Area")
+  List<Topic> _topics = []; // Display list (first item removed for tab UI)
   bool _isLoadingTopics = false;
   Topic? _selectedTopic;
 
@@ -87,55 +89,63 @@ class HomeViewModel extends ChangeNotifier {
 
   // Initialize view model
   Future<void> initialize() async {
+    // Location must be first — news filter depends on it.
     await loadLocationData();
-    await loadTopicsData();
+    // Topics and news are independent of each other — run in parallel.
+    await Future.wait([loadTopicsData(), loadNewsData()]);
     if (_selectedTopic == null && _topics.isNotEmpty) {
       _selectedTopic = _topics.first;
+      // Re-filter now that we know which topic is selected.
+      _filterNewsForCurrentTab();
+      notifyListeners();
     }
-
-    await loadNewsData();
   }
 
   // Load location data from storage
   Future<void> loadLocationData() async {
     _isLoadingLocation = true;
-    _error = null;
-    notifyListeners();
-
     try {
-      final state = await _storage.getSelectedState();
-      final district = await _storage.getSelectedDistrict();
-      final mandal = await _storage.getSelectedMandal();
-      final language = await _storage.getSelectedLanguage();
-      final topics = await _storage.getSelectedTopics();
-
-      _selectedState = state;
-      _selectedDistrict = district;
-      _selectedMandal = mandal;
-      _selectedLanguage = language;
-      _selectedTopics = topics;
+      // Run all storage reads in parallel — they are independent.
+      final results = await Future.wait([
+        _storage.getSelectedState(),
+        _storage.getSelectedDistrict(),
+        _storage.getSelectedMandal(),
+        _storage.getSelectedLanguage(),
+        _storage.getSelectedTopics(),
+      ]);
+      _selectedState = results[0] as location_models.State?;
+      _selectedDistrict = results[1] as District?;
+      _selectedMandal = results[2] as Mandal?;
+      _selectedLanguage = results[3] as Map<String, dynamic>?;
+      _selectedTopics = results[4] as List<Map<String, dynamic>>;
       _error = null;
     } catch (e) {
       _error = 'Failed to load location data: $e';
     }
-
     _isLoadingLocation = false;
-    notifyListeners();
+    // No notifyListeners here — caller (initialize) will notify when everything is ready.
   }
 
   // Load news data from API
-  Future<void> loadNewsData() async {
-    _isLoadingNews = true;
-    _error = null;
-    notifyListeners();
+  // When silent is true, existing data stays visible while fetching (no loading spinner)
+  Future<void> loadNewsData({bool silent = false}) async {
+    if (!silent) {
+      _isLoadingNews = true;
+      _error = null;
+      notifyListeners();
+    }
 
     try {
-      // Fetch all news from API (no parameters)
+      // Fetch first page of news from API
       final userId = _authViewModel.user?.id.toString();
-      final newsData = await _newsRepository.getNews(
+      final paginatedResponse = await _newsRepository.getNews(
         status: 'published',
         userId: userId,
       );
+
+      final newsData = paginatedResponse.data;
+      _nextCursor = paginatedResponse.nextCursor;
+      _hasMoreNews = paginatedResponse.hasMore;
 
       // Filter by selected language if available
       if (_selectedLanguage != null) {
@@ -152,7 +162,10 @@ class HomeViewModel extends ChangeNotifier {
         final topicIds = _selectedTopics
             .map((topic) => topic['id'] as int)
             .toList();
-        newsData.where((item) => topicIds.contains(item.topicId)).toList();
+        newsData
+            .where(
+                (item) => item.topicLocations.any((l) => topicIds.contains(l.id)))
+            .toList();
       }
 
       _allNewsItems = newsData;
@@ -161,15 +174,7 @@ class HomeViewModel extends ChangeNotifier {
       _error = null;
 
       // Populate like statuses from API data
-      for (var news in _allNewsItems) {
-        if (news.isLiked == 1) {
-          _likeStatuses[news.id] = LikeStatus.liked;
-        } else if (news.isLiked == 0) {
-          _likeStatuses[news.id] = LikeStatus.disliked;
-        } else {
-          _likeStatuses[news.id] = LikeStatus.neutral;
-        }
-      }
+      _updateLikeStatuses(_allNewsItems);
     } catch (e) {
       _error = 'Failed to load news: $e';
       _allNewsItems = [];
@@ -180,6 +185,55 @@ class HomeViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Load more news (next page)
+  Future<void> loadMoreNews() async {
+    if (_isLoadingMore || !_hasMoreNews || _nextCursor == null) return;
+
+    _isLoadingMore = true;
+    notifyListeners();
+
+    try {
+      final userId = _authViewModel.user?.id.toString();
+      final paginatedResponse = await _newsRepository.getNews(
+        status: 'published',
+        userId: userId,
+        cursor: _nextCursor,
+      );
+
+      final newNews = paginatedResponse.data;
+      _nextCursor = paginatedResponse.nextCursor;
+      _hasMoreNews = paginatedResponse.hasMore;
+
+      // Avoid duplicates
+      final existingIds = _allNewsItems.map((n) => n.id).toSet();
+      final uniqueNews = newNews.where((n) => !existingIds.contains(n.id)).toList();
+
+      _allNewsItems.addAll(uniqueNews);
+      _allNewsItems.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      _filterNewsForCurrentTab();
+
+      _updateLikeStatuses(uniqueNews);
+    } catch (e) {
+      // Silently fail — user can retry by scrolling again
+    }
+
+    _isLoadingMore = false;
+    notifyListeners();
+  }
+
+  // Helper to update like statuses from news items
+  void _updateLikeStatuses(List<News> newsItems) {
+    for (var news in newsItems) {
+      if (news.isLiked != null) {
+        _likeStatuses[news.id] = news.isLiked == 1
+            ? LikeStatus.liked
+            : LikeStatus.disliked;
+      } else if (!_likeStatuses.containsKey(news.id)) {
+        _likeStatuses[news.id] = LikeStatus.neutral;
+      }
+    }
+  }
+
   // Load topics data from API
   Future<void> loadTopicsData() async {
     _isLoadingTopics = true;
@@ -188,8 +242,9 @@ class HomeViewModel extends ChangeNotifier {
 
     try {
       final topicsData = await _topicsRepository.getTopics();
+      _allTopics = List.from(topicsData);
       _topics = topicsData;
-      _topics.removeAt(0);
+      if (_topics.isNotEmpty) _topics.removeAt(0);
       _error = null;
     } catch (e) {
       _error = 'Failed to load topics: $e';
@@ -211,9 +266,12 @@ class HomeViewModel extends ChangeNotifier {
         // Don't navigate to the topic, just make it visible as a tab
       }
 
-      // Filter news for the new tab
+      // Show existing filtered data immediately
       _filterNewsForCurrentTab();
       notifyListeners();
+
+      // Fetch fresh data from API in the background (silent = no loading spinner)
+      loadNewsData(silent: true);
     }
   }
 
@@ -225,6 +283,9 @@ class HomeViewModel extends ChangeNotifier {
       _selectedLocationTab = topic.name;
       _filterNewsForCurrentTab();
       notifyListeners();
+
+      // Fetch fresh data from API in the background (silent = no loading spinner)
+      loadNewsData(silent: true);
     }
   }
 
@@ -248,15 +309,15 @@ class HomeViewModel extends ChangeNotifier {
     final tabs = [
       {
         'name': 'Your Area',
-        'displayName': _selectedMandal?.name ?? 'Your Area',
+        'displayName':/*  _selectedMandal?.name ?? */ 'Your Area',
       },
-      {'name': 'State Name', 'displayName': _selectedState?.name ?? 'State'},
+      // {'name': 'State Name', 'displayName': _selectedState?.name ?? 'State'},
       {'name': 'More', 'displayName': 'More'},
     ];
 
     // Add selected topic as dynamic tab if exists
     if (_selectedTopic != null) {
-      tabs.insert(2, {
+      tabs.insert(1, {
         'name': _selectedTopic!.name,
         'displayName': _selectedTopic!.name,
       });
@@ -270,40 +331,56 @@ class HomeViewModel extends ChangeNotifier {
         _selectedLocationTab == _selectedTopic!.name) {
         _filteredNewsItems = _allNewsItems
             .where((news) {
-              if (news.topicId != _selectedTopic!.id) return false;
-              
+              if (!news.hasTopicId(_selectedTopic!.id)) return false;
+
               if (_selectedMandal != null) {
-                return news.mandalId == _selectedMandal!.id;
+                return news.hasMandalId(_selectedMandal!.id);
               } else if (_selectedDistrict != null) {
-                return news.districtId == _selectedDistrict!.id;
+                return news.hasDistrictId(_selectedDistrict!.id);
               } else if (_selectedState != null) {
-                return news.stateId == _selectedState!.id;
+                return news.hasStateId(_selectedState!.id);
               } else {
                 return true;
               }
             })
             .toList();
-      // }
       return;
     }
 
     switch (_selectedLocationTab) {
       case 'Your Area':
-        // Filter by mandal (most specific)
-        if (_selectedMandal != null) {
-          _filteredNewsItems = _allNewsItems
-              .where((news) => news.mandalId == _selectedMandal!.id)
-              .toList();
-        } else {
+        // Filter by "Your Area" topic + user's location
+        final yourAreaTopic = _allTopics.where(
+          (t) => t.name.toLowerCase() == 'your area' || (t.slug?.toLowerCase() ?? '') == 'your-area',
+        ).firstOrNull;
+
+        if (yourAreaTopic == null) {
           _filteredNewsItems = [];
+          break;
         }
+
+        _filteredNewsItems = _allNewsItems.where((news) {
+          // Must have the "Your Area" topic
+          if (!news.hasTopicId(yourAreaTopic.id)) {
+            return false;
+          }
+          // Filter by location
+          if (_selectedMandal != null) {
+            return news.hasMandalId(_selectedMandal!.id);
+          } else if (_selectedDistrict != null) {
+            return news.hasDistrictId(_selectedDistrict!.id);
+          } else if (_selectedState != null) {
+            return news.hasStateId(_selectedState!.id);
+          }
+          return false;
+        }).toList();
         break;
 
       case 'State Name':
         // Filter by state
         if (_selectedState != null) {
           _filteredNewsItems = _allNewsItems
-              .where((news) => news.stateId == _selectedState!.id)
+              .where((news) => news.hasStateId(_selectedState!.id))
               .toList();
         } else {
           _filteredNewsItems = [];
@@ -315,8 +392,22 @@ class HomeViewModel extends ChangeNotifier {
     }
   }
 
-  // Refresh all data
+  // Increment view count locally
+  void incrementViewCount(int newsId) {
+    final index = _allNewsItems.indexWhere((n) => n.id == newsId);
+    if (index != -1) {
+      _allNewsItems[index] = _allNewsItems[index].copyWith(
+        viewsCount: _allNewsItems[index].viewsCount + 1,
+      );
+      _filterNewsForCurrentTab();
+      notifyListeners();
+    }
+  }
+
+  // Refresh all data (resets pagination)
   Future<void> refresh() async {
+    _nextCursor = null;
+    _hasMoreNews = true;
     await Future.wait([loadLocationData(), loadNewsData()]);
   }
 
@@ -324,36 +415,63 @@ class HomeViewModel extends ChangeNotifier {
     await Future.wait([loadTopicsData()]);
   }
 
-  // Like or dislike a news item
+  // Like or dislike a news item (with toggle support)
   Future<void> likeDislike({
     required int likeableId,
     required LikeableType likeableType,
     required bool isLike,
   }) async {
+    final currentStatus = _likeStatuses[likeableId] ?? LikeStatus.neutral;
+    final newsIndex = _allNewsItems.indexWhere((n) => n.id == likeableId);
+
+    // Determine new status (toggle if same action repeated)
+    LikeStatus newStatus;
+    if (isLike && currentStatus == LikeStatus.liked) {
+      newStatus = LikeStatus.neutral; // Un-like
+    } else if (!isLike && currentStatus == LikeStatus.disliked) {
+      newStatus = LikeStatus.neutral; // Un-dislike
+    } else {
+      newStatus = isLike ? LikeStatus.liked : LikeStatus.disliked;
+    }
+
+    // Optimistic count update
+    if (newsIndex != -1) {
+      var item = _allNewsItems[newsIndex];
+      var likes = item.likesCount;
+      var dislikes = item.dislikesCount;
+
+      // Remove previous vote count
+      if (currentStatus == LikeStatus.liked) likes--;
+      if (currentStatus == LikeStatus.disliked) dislikes--;
+
+      // Add new vote count
+      if (newStatus == LikeStatus.liked) likes++;
+      if (newStatus == LikeStatus.disliked) dislikes++;
+
+      _allNewsItems[newsIndex] = item.copyWith(
+        isLiked: newStatus == LikeStatus.liked ? 1 : (newStatus == LikeStatus.disliked ? 0 : null),
+        likesCount: likes < 0 ? 0 : likes,
+        dislikesCount: dislikes < 0 ? 0 : dislikes,
+      );
+      _filterNewsForCurrentTab();
+    }
+
+    _likeStatuses[likeableId] = newStatus;
+    notifyListeners();
+
+    // API call in background
     try {
       await _commentsRepository.likeDislike(
         likeableId: likeableId,
         likeableType: likeableType,
         isLike: isLike,
       );
-      // Update local status
-      _likeStatuses[likeableId] = isLike
-          ? LikeStatus.liked
-          : LikeStatus.disliked;
-
-      // Update the news item locally
-      final newsIndex = _allNewsItems.indexWhere((n) => n.id == likeableId);
-      if (newsIndex != -1) {
-        _allNewsItems[newsIndex] = _allNewsItems[newsIndex].copyWith(
-          isLiked: isLike ? 1 : 0,
-        );
-        _filterNewsForCurrentTab();
-      }
-
-      notifyListeners();
     } catch (e) {
-      // Handle error, perhaps notify listeners with error
-      _error = 'Failed to like/dislike: $e';
+      // Revert on failure
+      _likeStatuses[likeableId] = currentStatus;
+      if (newsIndex != -1) {
+        await loadNewsData(silent: true);
+      }
       notifyListeners();
     }
   }

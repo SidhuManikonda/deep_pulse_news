@@ -38,6 +38,9 @@ class RegisterRequest {
   final String mobile;
   final String password;
   final String passwordConfirmation;
+  final int? stateId;
+  final int? districtId;
+  final int? mandalId;
 
   RegisterRequest({
     required this.name,
@@ -45,6 +48,9 @@ class RegisterRequest {
     required this.mobile,
     required this.password,
     required this.passwordConfirmation,
+    this.stateId,
+    this.districtId,
+    this.mandalId,
   });
 
   Map<String, dynamic> toJson() {
@@ -54,22 +60,25 @@ class RegisterRequest {
       'mobile': mobile,
       'password': password,
       'password_confirmation': passwordConfirmation,
+      if (stateId != null) 'state_id': stateId,
+      if (districtId != null) 'district_id': districtId,
+      if (mandalId != null) 'mandal_id': mandalId,
     };
   }
 }
 
 class LoginRequest {
-  final String email;
+  final String mobile;
   final String password;
 
   LoginRequest({
-    required this.email,
+    required this.mobile,
     required this.password,
   });
 
   Map<String, dynamic> toJson() {
     return {
-      'email': email,
+      'mobile': mobile,
       'password': password,
     };
   }

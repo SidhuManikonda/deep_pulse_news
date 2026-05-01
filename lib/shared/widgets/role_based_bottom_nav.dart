@@ -112,7 +112,7 @@ class RoleBasedBottomNav extends ConsumerWidget {
         'route': '/moderate',
       });
     } else if (user.primaryRole.level >= 3) {
-      // For editors and above, show a "More" tab for additional features
+      // For dist-reporter and above, show a "More" tab for additional features
       items.add({
         'icon': 'more',
         'label': 'More',

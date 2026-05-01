@@ -1,16 +1,21 @@
 import 'package:flutter/material.dart';
-import '../../features/splash/splash_screen.dart';
+
+import '../../features/auth/gmail_sso_screen.dart';
 import '../../features/auth/login_screen.dart';
+import '../../features/auth/phone_hint_screen.dart';
 import '../../features/auth/register_screen.dart';
-import '../../features/onboarding/location_selection_screen.dart';
-import '../../features/onboarding/language_selection_screen.dart';
-import '../../features/onboarding/topics_selection_screen.dart';
 import '../../features/home/home_screen.dart';
+import '../../features/onboarding/language_selection_screen.dart';
+import '../../features/onboarding/location_selection_screen.dart';
+import '../../features/onboarding/topics_selection_screen.dart';
 import '../../features/profile/profile_screen.dart';
+import '../../features/splash/splash_screen.dart';
 
 class AppRouter {
   static const String splash = '/';
+  static const String phoneHint = '/phone-hint';
   static const String login = '/login';
+  static const String gmailSso = '/gmail-sso';
   static const String register = '/register';
   static const String locationSelection = '/location-selection';
   static const String languageSelection = '/language-selection';
@@ -22,10 +27,14 @@ class AppRouter {
     switch (settings.name) {
       case splash:
         return MaterialPageRoute(builder: (_) => const SplashScreen());
-      case login:
-        return MaterialPageRoute(builder: (_) => const LoginScreen());
-      case register:
-        return MaterialPageRoute(builder: (_) => const RegisterScreen());
+      // case phoneHint:
+      //   return MaterialPageRoute(builder: (_) => const PhoneHintScreen());
+      // case login:
+      //   return MaterialPageRoute(builder: (_) => const LoginScreen());
+      case gmailSso:
+        return MaterialPageRoute(builder: (_) => const GmailSsoScreen());
+      // case register:
+      //   return MaterialPageRoute(builder: (_) => const RegisterScreen());
       case locationSelection:
         return MaterialPageRoute(builder: (_) => const LocationSelectionScreen());
       case languageSelection:

@@ -1,10 +1,13 @@
-import 'package:flutter/services.dart';
-import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
-import '../constants/app_constants.dart';
+
 import '../../shared/widgets/alert_popup.dart';
+import '../constants/app_constants.dart';
 
 class ApiService {
   final String baseUrl;
@@ -29,7 +32,12 @@ class ApiService {
   // Headers for authenticated requests
   Map<String, String> get _authHeaders => {
     'Content-Type': 'application/json',
+    'Accept': 'application/json',
     if (_authToken != null) 'Authorization': 'Bearer $_authToken',
+  };
+
+  Map<String, String> get _defaultHeaders => {
+    'Accept': 'application/json',
   };
 
   // Helper method to show error alerts
@@ -92,7 +100,7 @@ class ApiService {
     bool showErrorAlert = true,
   }) async {
     try {
-      final requestHeaders = {...headers, if (useAuth) ..._authHeaders};
+      final requestHeaders = {..._defaultHeaders, ...headers, if (useAuth) ..._authHeaders};
 
       // Build URI with query parameters only if they exist
       final uri = queryParameters.isNotEmpty
@@ -139,6 +147,7 @@ class ApiService {
         Uri.parse('$baseUrl$path'),
         headers: {
           'Content-Type': 'application/json',
+          ..._defaultHeaders,
           ...headers,
           if (useAuth) ..._authHeaders,
         },
@@ -198,6 +207,7 @@ class ApiService {
         Uri.parse('$baseUrl$path'),
         headers: {
           'Content-Type': 'application/json',
+          ..._defaultHeaders,
           ...headers,
           if (useAuth) ..._authHeaders,
         },
@@ -231,6 +241,52 @@ class ApiService {
     }
   }
 
+  Future<dynamic> patch(
+    String path,
+    Map<String, dynamic> data, {
+    Map<String, String> headers = const {},
+    bool useAuth = false,
+    bool showErrorAlert = true,
+  }) async {
+    try {
+      final response = await http.patch(
+        Uri.parse('$baseUrl$path'),
+        headers: {
+          'Content-Type': 'application/json',
+          ..._defaultHeaders,
+          ...headers,
+          if (useAuth) ..._authHeaders,
+        },
+        body: json.encode(data),
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        final errorMessage = _extractErrorMessage(
+          response.body,
+          'Update failed',
+        );
+        if (showErrorAlert) {
+          _showErrorAlert(errorMessage, title: 'Update Failed');
+        }
+        return {
+          'error': 'Failed PATCH: $path',
+          'statusCode': response.statusCode,
+          'message': response.body,
+        };
+      }
+    } catch (e) {
+      if (showErrorAlert) {
+        _showErrorAlert(
+          'Network error. Please check your connection.',
+          title: 'Connection Error',
+        );
+      }
+      return {'error': 'Network error: $e', 'path': path};
+    }
+  }
+
   Future<dynamic> delete(
     String path, {
     Map<String, String> headers = const {},
@@ -240,7 +296,7 @@ class ApiService {
     try {
       final response = await http.delete(
         Uri.parse('$baseUrl$path'),
-        headers: {...headers, if (useAuth) ..._authHeaders},
+        headers: {..._defaultHeaders, ...headers, if (useAuth) ..._authHeaders},
       );
 
       if (response.statusCode == 200 || response.statusCode == 204) {
@@ -329,6 +385,7 @@ class ApiService {
       final request = http.MultipartRequest('POST', Uri.parse('$baseUrl$path'));
 
       // Add headers
+      request.headers['Accept'] = 'application/json';
       if (useAuth && _authToken != null) {
         request.headers['Authorization'] = 'Bearer $_authToken';
       }
@@ -338,25 +395,80 @@ class ApiService {
         request.fields[key] = value.toString();
       });
 
-      // Add files
+      // Add files — stream from disk instead of loading all bytes into memory
       if (files != null && files.isNotEmpty) {
         for (final file in files) {
-          final bytes = await file.readAsBytes();
-          final multipartFile = http.MultipartFile.fromBytes(
+          final length = await file.length();
+          final stream = http.ByteStream(file.openRead());
+
+          // Ensure filename has a proper extension
+          // Some phones return cache paths without extensions
+          var filename = basename(file.path);
+          if (!filename.contains('.')) {
+            // Read first bytes to detect type
+            final headerBytes = await file.openRead(0, 8).expand((b) => b).toList();
+            if (headerBytes.length >= 4) {
+              if (headerBytes[0] == 0xFF && headerBytes[1] == 0xD8) {
+                filename = '$filename.jpg';
+              } else if (headerBytes[0] == 0x89 && headerBytes[1] == 0x50) {
+                filename = '$filename.png';
+              } else if (headerBytes[0] == 0x52 && headerBytes[1] == 0x49) {
+                filename = '$filename.webp';
+              } else if (headerBytes[0] == 0x47 && headerBytes[1] == 0x49) {
+                filename = '$filename.gif';
+              } else if (headerBytes.length >= 8 &&
+                  headerBytes[4] == 0x66 && headerBytes[5] == 0x74) {
+                filename = '$filename.mp4';
+              } else {
+                // Default to jpg for unknown image types
+                filename = '$filename.jpg';
+              }
+            } else {
+              filename = '$filename.jpg';
+            }
+          }
+
+          final multipartFile = http.MultipartFile(
             fileFieldName,
-            bytes,
-            filename: basename(file.path),
+            stream,
+            length,
+            filename: filename,
           );
           request.files.add(multipartFile);
         }
       }
 
-      final streamedResponse = await request.send();
+      final streamedResponse = await request.send().timeout(
+        const Duration(minutes: 5),
+        onTimeout: () {
+          throw Exception('Upload timed out. Please try with smaller files or a better connection.');
+        },
+      );
       final response = await http.Response.fromStream(streamedResponse);
 
-      final responseBody = Map<String, dynamic>.from(
-        json.decode(response.body),
-      );
+
+
+      // Check for non-JSON responses (e.g., nginx 413, server HTML errors)
+      if (response.body.trimLeft().startsWith('<')) {
+        final msg = response.statusCode == 413
+            ? 'File too large. Please reduce file size.'
+            : 'Server error (${response.statusCode}). Please try again.';
+        if (showErrorAlert) {
+          _showErrorAlert(msg, title: 'Upload Failed');
+        }
+        return {'error': msg, 'statusCode': response.statusCode};
+      }
+
+      Map<String, dynamic> responseBody;
+      try {
+        responseBody = Map<String, dynamic>.from(json.decode(response.body));
+      } catch (_) {
+        final msg = 'Unexpected server response (${response.statusCode})';
+        if (showErrorAlert) {
+          _showErrorAlert(msg, title: 'Upload Failed');
+        }
+        return {'error': msg, 'statusCode': response.statusCode};
+      }
 
       if (response.statusCode == 201 || response.statusCode == 200) {
         return responseBody;
@@ -368,16 +480,19 @@ class ApiService {
         if (showErrorAlert) {
           _showErrorAlert(errorMessage, title: 'Upload Failed');
         }
+        responseBody['error'] = 'Failed: ${response.statusCode}';
         return responseBody;
       }
     } catch (e) {
       if (showErrorAlert) {
         _showErrorAlert(
-          'Network error during upload. Please check your connection.',
+          e.toString().contains('timed out')
+              ? 'Upload timed out. Please try with a better connection.'
+              : 'Upload failed: ${e.toString().replaceAll('Exception: ', '')}',
           title: 'Upload Error',
         );
       }
-      return {'error': 'Network error: $e', 'path': path};
+      return {'error': 'Upload error: $e', 'path': path};
     }
   }
 }

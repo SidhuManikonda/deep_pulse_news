@@ -14,6 +14,24 @@ class OnboardingStorage {
   static const String _selectedMandalKey = 'selected_mandal';
   static const String _selectedLanguageKey = 'selected_language';
   static const String _selectedTopicsKey = 'selected_topics';
+  static const String _savedMobileKey = 'saved_mobile';
+
+  Future<void> saveMobile(String mobile) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_savedMobileKey, mobile);
+  }
+
+  Future<String?> getSavedMobile() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(_savedMobileKey);
+    return (value != null && value.isNotEmpty) ? value : null;
+  }
+
+  Future<void> clearMobile() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_savedMobileKey);
+  }
+
   Future<bool> isLocationCompleted() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(_locationCompletedKey) ?? false;

@@ -26,7 +26,8 @@ class NotificationsViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _pendingNews = await _newsRepository.getNews(status: 'pending');
+      final response = await _newsRepository.getNews(status: 'pending');
+      _pendingNews = response.data;
           _pendingNews.sort((a, b) {
       final aDate = a.createdAt;
       final bDate = b.createdAt;

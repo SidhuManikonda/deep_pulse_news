@@ -28,7 +28,7 @@ class NewsTranslation {
       slug: json['slug'] ?? '',
       shortDescription: json['short_description'] ?? '',
       content: json['content'] ?? '',
-      createdAt: DateTime.parse(json['created_at'] ?? DateTime.now().toIso8601String()),
+      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '') ?? DateTime.now(),
     );
   }
 

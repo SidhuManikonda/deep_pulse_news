@@ -8,18 +8,43 @@ class VideoPreloaderService {
 
   final Map<String, VideoPlayerController> _controllers = {};
   final Map<String, bool> _initializationStatus = {};
-  final int _maxCachedControllers = 8;
+  final Set<String> _activeUrls = {}; // Track actively used controllers
+  final int _maxCachedControllers = 6;
+
+  /// Mark a controller as actively in use (prevents eviction)
+  void markActive(String videoUrl) {
+    _activeUrls.add(videoUrl);
+  }
+
+  /// Mark a controller as no longer actively in use
+  void markInactive(String videoUrl) {
+    _activeUrls.remove(videoUrl);
+  }
 
   Future<VideoPlayerController?> getOrCreateController(String videoUrl) async {
     if (_controllers.containsKey(videoUrl)) {
-      return _controllers[videoUrl];
+      final controller = _controllers[videoUrl]!;
+      // Re-initialize if the controller was disposed or errored
+      if (!controller.value.isInitialized || controller.value.hasError) {
+        _controllers.remove(videoUrl);
+        _initializationStatus.remove(videoUrl);
+        try {
+          controller.dispose();
+        } catch (_) {}
+        return _createAndInitController(videoUrl);
+      }
+      return controller;
     }
 
-    if (_controllers.length >= _maxCachedControllers) {
-      _clearOldestController();
-    }
+    _evictIfNeeded();
+    return _createAndInitController(videoUrl);
+  }
 
-    final controller = VideoPlayerController.networkUrl(Uri.parse(videoUrl));
+  Future<VideoPlayerController?> _createAndInitController(String videoUrl) async {
+    final controller = VideoPlayerController.networkUrl(
+      Uri.parse(videoUrl),
+      httpHeaders: const {'Connection': 'keep-alive'},
+    );
     _controllers[videoUrl] = controller;
     _initializationStatus[videoUrl] = false;
 
@@ -31,6 +56,9 @@ class VideoPreloaderService {
       debugPrint('Error initializing video: $e');
       _controllers.remove(videoUrl);
       _initializationStatus.remove(videoUrl);
+      try {
+        controller.dispose();
+      } catch (_) {}
       return null;
     }
   }
@@ -40,22 +68,25 @@ class VideoPreloaderService {
       return;
     }
 
-    if (_controllers.length >= _maxCachedControllers) {
-      _clearOldestController();
-    }
+    _evictIfNeeded();
 
-    final controller = VideoPlayerController.networkUrl(Uri.parse(videoUrl));
+    final controller = VideoPlayerController.networkUrl(
+      Uri.parse(videoUrl),
+      httpHeaders: const {'Connection': 'keep-alive'},
+    );
     _controllers[videoUrl] = controller;
     _initializationStatus[videoUrl] = false;
 
     try {
       await controller.initialize();
       _initializationStatus[videoUrl] = true;
-      debugPrint('Preloaded video: $videoUrl');
     } catch (e) {
       debugPrint('Error preloading video: $e');
       _controllers.remove(videoUrl);
       _initializationStatus.remove(videoUrl);
+      try {
+        controller.dispose();
+      } catch (_) {}
     }
   }
 
@@ -75,17 +106,28 @@ class VideoPreloaderService {
     return _initializationStatus[videoUrl] ?? false;
   }
 
-  void _clearOldestController() {
-    if (_controllers.isEmpty) return;
-    
-    final oldestKey = _controllers.keys.first;
-    final controller = _controllers.remove(oldestKey);
-    _initializationStatus.remove(oldestKey);
-    controller?.dispose();
-    debugPrint('Cleared oldest controller: $oldestKey');
+  /// Evict oldest non-active, non-playing controller if at capacity
+  void _evictIfNeeded() {
+    if (_controllers.length < _maxCachedControllers) return;
+
+    // Find the first controller that is not active and not playing
+    String? keyToRemove;
+    for (final entry in _controllers.entries) {
+      if (!_activeUrls.contains(entry.key) && !entry.value.value.isPlaying) {
+        keyToRemove = entry.key;
+        break;
+      }
+    }
+
+    if (keyToRemove != null) {
+      final controller = _controllers.remove(keyToRemove);
+      _initializationStatus.remove(keyToRemove);
+      controller?.dispose();
+    }
   }
 
   void removeController(String videoUrl) {
+    _activeUrls.remove(videoUrl);
     final controller = _controllers.remove(videoUrl);
     _initializationStatus.remove(videoUrl);
     controller?.dispose();
@@ -97,9 +139,11 @@ class VideoPreloaderService {
     }
     _controllers.clear();
     _initializationStatus.clear();
+    _activeUrls.clear();
   }
 
   void disposeController(String videoUrl) {
+    _activeUrls.remove(videoUrl);
     final controller = _controllers.remove(videoUrl);
     _initializationStatus.remove(videoUrl);
     controller?.dispose();

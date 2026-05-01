@@ -1,17 +1,21 @@
 import 'package:deep_pulse_news/core/constants/app_constants.dart';
-import 'package:deep_pulse_news/shared/widgets/auto_scaled_text.dart';
+import 'package:deep_pulse_news/features/admin/location_management_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/app_colors.dart';
-import '../../core/services/font_service.dart';
+import '../../data/models/user.dart';
 import '../../providers/app_providers.dart';
-import '../../providers/font_provider.dart';
+import 'saved_news_screen.dart';
 import '../../core/services/onboarding_storage.dart';
 import '../../data/models/state.dart' as location_models;
 import '../../data/models/district.dart';
 import '../../data/models/mandal.dart';
 import '../../extensions/user_extensions.dart';
+import '../../data/repositories/auth_repository.dart';
 import '../../features/admin/admin_user_management_hub_screen.dart';
+import '../../features/admin/news_management_screen.dart';
+import '../../core/constants/app_font_sizes.dart';
+import '../home/home_view_model.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -65,349 +69,619 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final theme = Theme.of(context);
     final isAuthenticated = user != null;
 
-    return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: CustomScrollView(
-        slivers: [
-          // Custom App Bar with gradient
-          SliverAppBar(
-            expandedHeight: 200,
-            pinned: true,
-            backgroundColor: theme.appPrimary,
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white),
-              onPressed: () => Navigator.pop(context),
-            ),
-            flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      theme.appPrimary,
-                      theme.appPrimary.withOpacity(0.8),
-                      theme.appPrimaryDark,
-                    ],
+    // ── New UI ─────────────────────────────────────────────────────────
+    return _buildNewScreen(context, user, theme, isAuthenticated);
+
+    /* ── Old UI (kept for reference) ─────────────────────────────────
+    return SafeArea(
+      top: false,
+      left: false,
+      right: false,
+      bottom: true,
+      child: Scaffold(
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        body: CustomScrollView(
+          slivers: [
+            // Custom App Bar with gradient
+            SliverAppBar(
+              expandedHeight: 200,
+              pinned: true,
+              backgroundColor: theme.appPrimary,
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: () => Navigator.pop(context),
+              ),
+              flexibleSpace: FlexibleSpaceBar(
+                background: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        theme.appPrimary,
+                        theme.appPrimary.withOpacity(0.8),
+                        theme.appPrimaryDark,
+                      ],
+                    ),
                   ),
-                ),
-                child: SafeArea(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const SizedBox(height: 20),
-                      // Profile Avatar
-                      Container(
-                        width: 80,
-                        height: 80,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.2),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Center(
-                          child: AutoScaledText(
-                            isAuthenticated && user.name.isNotEmpty
-                                ? user.name[0].toUpperCase()
-                                : 'G', // G for Guest
-                            style: TextStyle(
-                              fontSize: 32,
-                              fontWeight: FontWeight.bold,
-                              color: theme.appPrimary,
+                  child: SafeArea(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const SizedBox(height: 20),
+                        // Profile Avatar
+                        Container(
+                          width: 80,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.2),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: Center(
+                            child: Text(
+                              isAuthenticated && user.name.isNotEmpty
+                                  ? user.name[0].toUpperCase()
+                                  : 'G', // G for Guest
+                              style: TextStyle(
+                                fontSize: scaledFontSize(25),
+                                fontWeight: FontWeight.bold,
+                                color: theme.appPrimary,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 12),
-                      // User Name or Guest
-                      AutoScaledText(
-                        isAuthenticated
-                            ? (user.name.isNotEmpty ? user.name : 'User')
-                            : 'Guest User',
-                        style: const TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                        const SizedBox(height: 12),
+                        // User Name or Guest
+                        Text(
+                          isAuthenticated
+                              ? (user.name.isNotEmpty ? user.name : 'User')
+                              : 'Guest User',
+                          style: TextStyle(
+                            fontSize: scaledFontSize(20),
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      // Location or Login prompt
-                      AutoScaledText(
-                        isAuthenticated
-                            ? (user.email.isNotEmpty
-                                  ? user.email
-                                  : 'No email set')
-                            : _getLocationDisplayText(),
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.white.withOpacity(0.9),
+                        const SizedBox(height: 4),
+                        // Location or Login prompt
+                        Text(
+                          isAuthenticated
+                              ? (user.email.isNotEmpty
+                                    ? user.email
+                                    : 'No email set')
+                              : _getLocationDisplayText(),
+                          style: TextStyle(
+                            fontSize: scaledFontSize(14),
+                            color: Colors.white.withOpacity(0.9),
+                          ),
                         ),
-                      ),
-                      // const Divider(),
-                      // Center(
-                      //   child: Row(
-                      //     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      //     children: [
-                      //       AutoScaledText(
-                      //         "Followers 150",
-                      //         style: TextStyle(
-                      //           fontSize: 14,
-                      //           color: Colors.white.withOpacity(0.9),
-                      //         ),
-                      //       ),
-                      //       Container(
-                      //         color: Theme.of(context).appDivider,
-                      //         width: 1,
-                      //         height: 20,
-                      //       ),
-                      //       AutoScaledText(
-                      //         "Following 150",
-                      //         style: TextStyle(
-                      //           fontSize: 14,
-                      //           color: Colors.white.withOpacity(0.9),
-                      //         ),
-                      //       ),
-                      //     ],
-                      //   ),
-                      // ),
-                    ],
+                        // const Divider(),
+                        // Center(
+                        //   child: Row(
+                        //     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        //     children: [
+                        //       Text(
+                        //         "Followers 150",
+                        //         style: TextStyle(
+                        //           fontSize: scaledFontSize(14),
+                        //           color: Colors.white.withOpacity(0.9),
+                        //         ),
+                        //       ),
+                        //       Container(
+                        //         color: Theme.of(context).appDivider,
+                        //         width: 1,
+                        //         height: 20,
+                        //       ),
+                        //       Text(
+                        //         "Following 150",
+                        //         style: TextStyle(
+                        //           fontSize: scaledFontSize(14),
+                        //           color: Colors.white.withOpacity(0.9),
+                        //         ),
+                        //       ),
+                        //     ],
+                        //   ),
+                        // ),
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
 
-          // Profile Content
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Account Section - conditional based on authentication
-                  _buildSectionHeader('Account'),
-                  const SizedBox(height: 12),
-                  if (isAuthenticated)
+            // Profile Content
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Account Section - conditional based on authentication
+                    _buildSectionHeader('Account'),
+                    // const SizedBox(height: 12),
+                    if (isAuthenticated)
+                      _buildProfileCard([])
+                    else
+                      _buildProfileCard([
+                        _buildProfileTile(
+                          icon: Icons.login,
+                          iconColor: theme.appPrimary,
+                          title: 'Login',
+                          subtitle: 'Sign in to access all features',
+                          onTap: () =>
+                              Navigator.pushNamed(context, '/gmail-sso'),
+                        ),
+                      ]),
+                    const SizedBox(height: 24),
+
+                    // Saved News
                     _buildProfileCard([
-                      _buildProfileTile(
-                        icon: Icons.person_outline,
-                        iconColor: theme.appPrimary,
-                        title: 'Personal Information',
-                        subtitle: user.name.isNotEmpty
-                            ? user.name
-                            : 'Update your details',
-                        onTap: () => _showPersonalInfoSheet(context, user),
-                      ),
                       _buildDivider(),
                       _buildProfileTile(
-                        icon: Icons.phone_outlined,
-                        iconColor: Colors.green,
-                        title: 'Mobile Number',
-                        subtitle: user.mobile.isNotEmpty
-                            ? user.mobile
-                            : 'Not set',
-                        onTap: () {},
-                      ),
-                      _buildDivider(),
-                      _buildProfileTile(
-                        icon: Icons.email_outlined,
-                        iconColor: Colors.orange,
-                        title: 'Email',
-                        subtitle: user.email.isNotEmpty
-                            ? user.email
-                            : 'Not set',
-                        trailing: user.emailVerifiedAt != null
-                            ? Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.green.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: const AutoScaledText(
-                                  'Verified',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.green,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              )
-                            : null,
-                        onTap: () {},
-                      ),
-                    ])
-                  else
-                    _buildProfileCard([
-                      _buildProfileTile(
-                        icon: Icons.login,
-                        iconColor: theme.appPrimary,
-                        title: 'Login',
-                        subtitle: 'Sign in to access all features',
-                        onTap: () => Navigator.pushNamed(context, '/login'),
-                      ),
-                    ]),
-                  const SizedBox(height: 24),
-
-                  // Management Section - Only show for admin and sub-admin roles
-                  if (isAuthenticated &&
-                      (user.primaryRole.value == 'admin' ||
-                          user.primaryRole.value == 'sub_admin')) ...[
-                    _buildSectionHeader('Management'),
-                    const SizedBox(height: 12),
-                    _buildProfileCard([
-                      _buildProfileTile(
-                        icon: Icons.people_alt_outlined,
-                        iconColor: theme.appPrimary,
-                        title: 'User Management',
-                        subtitle: 'View users and create new users',
+                        icon: Icons.bookmark_outline,
+                        iconColor: Colors.amber,
+                        title: 'Saved News',
+                        subtitle: 'View your saved articles',
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) =>
-                                const AdminUserManagementHubScreen(),
+                            builder: (context) => const SavedNewsScreen(),
                           ),
                         ),
                       ),
                     ]),
                     const SizedBox(height: 24),
-                  ],
 
-                  // Preferences Section
-                  _buildSectionHeader('Preferences'),
-                  const SizedBox(height: 12),
-                  _buildProfileCard([
-                    _buildProfileTile(
-                      icon: Icons.language,
-                      iconColor: Colors.blue,
-                      title: 'Language',
-                      subtitle: _getLanguageDisplayText(),
-                      onTap: () => _navigateToLanguageSelection(context),
+                    // Management Section - Show for admin, sub-admin, and dist-reporter
+                    if (isAuthenticated &&
+                        (user.primaryRole.value == 'admin' ||
+                            user.primaryRole.value == 'subadmin' ||
+                            user.primaryRole.value == 'dist-reporter')) ...[
+                      _buildSectionHeader('Management'),
+                      const SizedBox(height: 12),
+                      _buildProfileCard([
+                        if (user.primaryRole.value == 'admin' ||
+                            user.primaryRole.value == 'subadmin') ...[
+                          _buildProfileTile(
+                            icon: Icons.people_alt_outlined,
+                            iconColor: theme.appPrimary,
+                            title: 'User Management',
+                            subtitle: 'View users and create new users',
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const AdminUserManagementHubScreen(),
+                              ),
+                            ),
+                          ),
+                          _buildDivider(),
+                        ],
+                        _buildProfileTile(
+                          icon: Icons.newspaper_outlined,
+                          iconColor: Colors.deepOrange,
+                          title: 'News Management',
+                          subtitle: 'Manage pending, published & rejected news',
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  const NewsManagementScreen(),
+                            ),
+                          ),
+                        ),
+                        if (isAuthenticated &&
+                            (user.primaryRole.value == 'admin')) ...[
+                          _buildDivider(),
+                          _buildProfileTile(
+                            icon: Icons.location_city_outlined,
+                            iconColor: Colors.deepOrange,
+                            title: 'Location Management',
+                            subtitle: 'Manage states, districts & mandals',
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const LocationManagementScreen(),
+                              ),
+                            ),
+                          ),
+                        ],
+                        // _buildDivider(),
+                        // if (isAuthenticated &&
+                        //     (user.primaryRole.value == 'admin')) ...[
+                        //   _buildProfileTile(
+                        //     icon: Icons.lock_outline,
+                        //     iconColor: Colors.teal,
+                        //     title: 'Change Password',
+                        //     subtitle: 'Update your account password',
+                        //     onTap: () => _showChangePasswordDialog(context),
+                        //   ),
+                        // ],
+                      ]),
+                      const SizedBox(height: 24),
+                    ],
+
+                    // Preferences Section
+                    _buildSectionHeader('Preferences'),
+                    const SizedBox(height: 12),
+                    _buildProfileCard([
+                      // _buildProfileTile(
+                      //   icon: Icons.language,
+                      //   iconColor: Colors.blue,
+                      //   title: 'Language',
+                      //   subtitle: _getLanguageDisplayText(),
+                      //   onTap: () => _navigateToLanguageSelection(context),
+                      // ),
+                      // _buildDivider(),
+                      Builder(
+                        builder: (context) {
+                          final role = user?.primaryRole.value ?? 'reader';
+                          final isLocked = role == 'reporter';
+                          final isSubAdmin = role == 'subadmin';
+                          final isDistrictReporter = role == 'dist-reporter';
+                          return _buildProfileTile(
+                            icon: Icons.location_on_outlined,
+                            iconColor: isLocked ? Colors.grey : Colors.red,
+                            title: 'Location',
+                            subtitle: _isLoadingLocation
+                                ? 'Loading...'
+                                : isLocked
+                                ? '${_getLocationDisplayText()} (Assigned)'
+                                : isSubAdmin
+                                ? '${_getLocationDisplayText()} (Change District/Mandal)'
+                                : isDistrictReporter
+                                ? '${_getLocationDisplayText()} (Change Mandal)'
+                                : _getLocationDisplayText(),
+                            trailing: isLocked
+                                ? Icon(
+                                    Icons.lock_outline,
+                                    size: 18,
+                                    color: Colors.grey,
+                                  )
+                                : null,
+                            onTap: isLocked
+                                ? () {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Location is assigned by admin and cannot be changed',
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                : isSubAdmin
+                                ? () => _showDistrictMandalPicker(context, user)
+                                : isDistrictReporter
+                                ? () => _showMandalPicker(context, user)
+                                : () => _showFullLocationPicker(context),
+                          );
+                        },
+                      ),
+                    ]),
+
+                    const SizedBox(height: 24),
+
+                    _buildSectionHeader('Support'),
+                    const SizedBox(height: 12),
+                    _buildProfileCard([
+                      _buildProfileTile(
+                        icon: Icons.info_outline,
+                        iconColor: Colors.blueGrey,
+                        title: 'About',
+                        subtitle: 'Version ${AppConstants.appVersion}',
+                        onTap: () => _showAboutDialog(context),
+                      ),
+                    ]),
+
+                    const SizedBox(height: 24),
+
+                    // Logout Button - Only show if authenticated
+                    if (isAuthenticated) _buildLogoutButton(context),
+                    const SizedBox(height: 32),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    // ──────────────────────────────────────────────────── */
+  }
+
+  // ════════════════════════════════════════════════════════
+  // NEW UI
+  // ════════════════════════════════════════════════════════
+
+  Widget _buildNewScreen(
+    BuildContext context,
+    User? user,
+    ThemeData theme,
+    bool isAuthenticated,
+  ) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(
+            child: _buildNewHeader(context, user, theme, isAuthenticated),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
+            sliver: SliverList(
+              delegate: SliverChildListDelegate([
+                // Account
+                _buildNewSectionHeader('Account'),
+                _buildNewProfileCard([
+                  if (!isAuthenticated)
+                    _buildNewTile(
+                      context: context,
+                      icon: Icons.login_rounded,
+                      iconBg: theme.appPrimary,
+                      title: 'Login',
+                      subtitle: 'Sign in to access all features',
+                      onTap: () => Navigator.pushNamed(context, '/gmail-sso'),
                     ),
-                    _buildDivider(),
-                    _buildProfileTile(
+                  _buildNewTile(
+                    context: context,
+                    icon: Icons.bookmark_outline,
+                    iconBg: const Color(0xFF7B61FF),
+                    title: 'Saved News',
+                    subtitle: 'View your saved articles',
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const SavedNewsScreen()),
+                    ),
+                  ),
+                ]),
+                const SizedBox(height: 20),
+
+                // Management — admins/subadmins/dist-reporters only
+                if (isAuthenticated &&
+                    (user!.primaryRole.value == 'admin' ||
+                        user.primaryRole.value == 'subadmin' ||
+                        user.primaryRole.value == 'dist-reporter')) ...[
+                  _buildNewSectionHeader('Management'),
+                  _buildNewProfileCard([
+                    if (user.primaryRole.value == 'admin' ||
+                        user.primaryRole.value == 'subadmin') ...[
+                      _buildNewTile(
+                        context: context,
+                        icon: Icons.people_alt_outlined,
+                        iconBg: const Color(0xFF4A80F0),
+                        title: 'User Management',
+                        subtitle: 'View users and create new users',
+                        showDivider: true,
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const AdminUserManagementHubScreen()),
+                        ),
+                      ),
+                    ],
+                    _buildNewTile(
+                      context: context,
+                      icon: Icons.newspaper_outlined,
+                      iconBg: const Color(0xFF28C76F),
+                      title: 'News Management',
+                      subtitle: 'Manage pending, published & rejected news',
+                      showDivider: user.primaryRole.value == 'admin',
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const NewsManagementScreen()),
+                      ),
+                    ),
+                    if (user.primaryRole.value == 'admin')
+                      _buildNewTile(
+                        context: context,
+                        icon: Icons.location_city_outlined,
+                        iconBg: const Color(0xFFFF9F43),
+                        title: 'Location Management',
+                        subtitle: 'Manage states, districts & mandals',
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const LocationManagementScreen()),
+                        ),
+                      ),
+                  ]),
+                  const SizedBox(height: 20),
+                ],
+
+                // Preferences
+                _buildNewSectionHeader('Preferences'),
+                _buildNewProfileCard([
+                  Builder(builder: (ctx) {
+                    final role = user?.primaryRole.value ?? 'reader';
+                    final isLocked = role == 'reporter';
+                    final isSubAdmin = role == 'subadmin';
+                    final isDistrictReporter = role == 'dist-reporter';
+                    return _buildNewTile(
+                      context: ctx,
                       icon: Icons.location_on_outlined,
-                      iconColor: Colors.red,
+                      iconBg: const Color(0xFF7B61FF),
                       title: 'Location',
                       subtitle: _isLoadingLocation
                           ? 'Loading...'
+                          : isLocked
+                          ? '${_getLocationDisplayText()} (Assigned)'
+                          : isSubAdmin
+                          ? '${_getLocationDisplayText()} (Change District/Mandal)'
+                          : isDistrictReporter
+                          ? '${_getLocationDisplayText()} (Change Mandal)'
                           : _getLocationDisplayText(),
-                      onTap: () => _navigateToLocationChange(context),
-                    ),
-                    _buildDivider(),
-                    _buildProfileTile(
-                      icon: Icons.category_outlined,
-                      iconColor: Colors.purple,
-                      title: 'Topics',
-                      subtitle: _getTopicsDisplayText(),
-                      onTap: () => _navigateToTopicsSelection(context),
-                    ),
-                  ]),
+                      trailing: isLocked
+                          ? Icon(Icons.lock_outline, size: 18, color: theme.appGrey400)
+                          : null,
+                      onTap: isLocked
+                          ? () => ScaffoldMessenger.of(ctx).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Location is assigned by admin and cannot be changed'),
+                                ),
+                              )
+                          : isSubAdmin
+                          ? () => _showDistrictMandalPicker(ctx, user)
+                          : isDistrictReporter
+                          ? () => _showMandalPicker(ctx, user)
+                          : () => _showFullLocationPicker(ctx),
+                    );
+                  }),
+                ]),
+                const SizedBox(height: 20),
 
-                  const SizedBox(height: 24),
+                // Support
+                _buildNewSectionHeader('Support'),
+                _buildNewProfileCard([
+                  _buildNewTile(
+                    context: context,
+                    icon: Icons.info_outline,
+                    iconBg: Colors.blueGrey,
+                    title: 'About',
+                    subtitle: 'Version ${AppConstants.appVersion}',
+                    onTap: () => _showAboutDialog(context),
+                  ),
+                ]),
+                const SizedBox(height: 24),
 
-                  // Settings Section
-                  _buildSectionHeader('Settings'),
-                  const SizedBox(height: 12),
-                  _buildProfileCard([
-                    _buildProfileTile(
-                      icon: Icons.notifications_outlined,
-                      iconColor: Colors.amber,
-                      title: 'Notifications',
-                      subtitle: 'Manage notifications',
-                      onTap: () => _showNotificationSettings(context),
-                    ),
-                    _buildDivider(),
-                    Builder(
-                      builder: (context) {
-                        final themeController = ref.watch(
-                          themeControllerProvider,
-                        );
-                        return _buildProfileTile(
-                          icon: Icons.dark_mode_outlined,
-                          iconColor: Colors.indigo,
-                          title: 'Dark Mode',
-                          subtitle: themeController.isDarkMode ? 'On' : 'Off',
-                          trailing: Switch(
-                            value: themeController.isDarkMode,
-                            onChanged: (value) {
-                              ref
-                                  .read(themeControllerProvider)
-                                  .setDarkMode(value);
-                            },
-                            activeColor: theme.appPrimary,
+                if (isAuthenticated) _buildNewLogoutButton(context),
+                const SizedBox(height: 32),
+              ]),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNewHeader(
+    BuildContext context,
+    User? user,
+    ThemeData theme,
+    bool isAuthenticated,
+  ) {
+    return Container(
+      color: Colors.white,
+      child: Stack(
+        children: [
+          // Decorative circles — soft neutral tones on white
+          Positioned(
+            top: -30, right: -40,
+            child: Container(
+              width: 150, height: 150,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Color(0xFFF0F2F8), // cool light grey
+              ),
+            ),
+          ),
+          Positioned(
+            top: 50, left: -50,
+            child: Container(
+              width: 120, height: 120,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Color(0xFFF5F6FB), // near-white grey
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: 10, right: 65,
+            child: Container(
+              width: 60, height: 60,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Color(0xFFECEEF6), // slightly deeper grey
+              ),
+            ),
+          ),
+          // Content
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(8, 4, 16, 28),
+              child: Column(
+                children: [
+                  // Back button row
+                  Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.arrow_back, color: Color(0xFF1C1C1E)),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  // Avatar with edit badge
+                  Stack(
+                    children: [
+                      Container(
+                        width: 88, height: 88,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: const Color(0xFFECEEF6),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.08),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Center(
+                          child: Text(
+                            isAuthenticated && user!.name.isNotEmpty
+                                ? user.name[0].toUpperCase()
+                                : 'G',
+                            style: const TextStyle(
+                              fontSize: 34,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1C1C1E),
+                            ),
                           ),
-                          onTap: () {
-                            ref.read(themeControllerProvider).toggleTheme();
-                          },
-                        );
-                      },
-                    ),
-                    _buildDivider(),
-                    _buildProfileTile(
-                      icon: Icons.text_fields,
-                      iconColor: Colors.teal,
-                      title: 'Font Size',
-                      subtitle: ref
-                          .watch(fontControllerProvider)
-                          .currentFontSize
-                          .displayName,
-                      onTap: () => _showFontSizeSheet(context),
-                    ),
-                  ]),
-
-                  const SizedBox(height: 24),
-
-                  // Support Section
-                  _buildSectionHeader('Support'),
+                        ),
+                      ),
+                      Positioned(
+                        bottom: 0, right: 0,
+                        child: GestureDetector(
+                          onTap: isAuthenticated
+                              ? () => _showPersonalInfoSheet(context, user)
+                              : null,
+                          child: Container(
+                            width: 28, height: 28,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF4A80F0),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2),
+                            ),
+                            child: const Icon(Icons.edit, color: Colors.white, size: 14),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 12),
-                  _buildProfileCard([
-                    _buildProfileTile(
-                      icon: Icons.help_outline,
-                      iconColor: Colors.cyan,
-                      title: 'Help & Support',
-                      subtitle: 'Get help with the app',
-                      onTap: () {},
+                  Text(
+                    isAuthenticated
+                        ? (user!.name.isNotEmpty ? user.name : 'User')
+                        : 'Guest User',
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1C1C1E),
                     ),
-                    _buildDivider(),
-                    _buildProfileTile(
-                      icon: Icons.privacy_tip_outlined,
-                      iconColor: Colors.grey,
-                      title: 'Privacy Policy',
-                      subtitle: 'Read our privacy policy',
-                      onTap: () {},
-                    ),
-                    _buildDivider(),
-                    _buildProfileTile(
-                      icon: Icons.description_outlined,
-                      iconColor: Colors.brown,
-                      title: 'Terms of Service',
-                      subtitle: 'Read our terms',
-                      onTap: () {},
-                    ),
-                    _buildDivider(),
-                    _buildProfileTile(
-                      icon: Icons.info_outline,
-                      iconColor: Colors.blueGrey,
-                      title: 'About',
-                      subtitle: 'Version ${AppConstants.appVersion}',
-                      onTap: () => _showAboutDialog(context),
-                    ),
-                  ]),
-
-                  const SizedBox(height: 24),
-
-                  // Logout Button - Only show if authenticated
-                  if (isAuthenticated) _buildLogoutButton(context),
-                  const SizedBox(height: 32),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    isAuthenticated
+                        ? (user!.email.isNotEmpty ? user.email : 'No email set')
+                        : _getLocationDisplayText(),
+                    style: const TextStyle(fontSize: 13, color: Color(0xFF8E8E93)),
+                  ),
                 ],
               ),
             ),
@@ -417,22 +691,162 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
+  Widget _buildNewSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: scaledFontSize(15),
+          fontWeight: FontWeight.bold,
+          color: Theme.of(context).appTextPrimary,
+          letterSpacing: 0.1,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNewProfileCard(List<Widget> children) {
+    if (children.isEmpty) return const SizedBox.shrink();
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(children: children),
+    );
+  }
+
+  Widget _buildNewTile({
+    required BuildContext context,
+    required IconData icon,
+    required Color iconBg,
+    required String title,
+    required String subtitle,
+    Widget? trailing,
+    bool showDivider = false,
+    required VoidCallback onTap,
+  }) {
+    final theme = Theme.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+            child: Row(
+              children: [
+                Container(
+                  width: 42, height: 42,
+                  decoration: BoxDecoration(
+                    color: iconBg.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, color: iconBg, size: 22),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: scaledFontSize(14),
+                          fontWeight: FontWeight.w600,
+                          color: theme.appTextPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          fontSize: scaledFontSize(12),
+                          color: theme.appTextSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                trailing ??
+                    Icon(Icons.chevron_right, color: theme.appGrey400, size: 20),
+              ],
+            ),
+          ),
+        ),
+        if (showDivider)
+          Divider(height: 1, indent: 72, endIndent: 16, color: theme.appDivider),
+      ],
+    );
+  }
+
+  Widget _buildNewLogoutButton(BuildContext context) {
+    return GestureDetector(
+      onTap: () => _showLogoutConfirmation(context),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          color: Colors.red.shade50,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.red.shade100),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.logout_rounded, color: Colors.red.shade400, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              'Logout',
+              style: TextStyle(
+                fontSize: scaledFontSize(14),
+                fontWeight: FontWeight.w600,
+                color: Colors.red.shade400,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ════════════════════════════════════════════════════════
+  // OLD UI METHODS (kept for reference — unused)
+  // ════════════════════════════════════════════════════════
+
+  // ignore: unused_element
   Widget _buildSectionHeader(String title) {
-    return AutoScaledText(
+    return Text(
       title,
       style: TextStyle(
-        fontSize: 18,
+        fontSize: scaledFontSize(16),
         fontWeight: FontWeight.bold,
         color: Theme.of(context).textTheme.headlineSmall?.color,
       ),
     );
   }
 
+  // ignore: unused_element
   Widget _buildProfileCard(List<Widget> children) {
     return Container(
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Theme.of(
+            context,
+          ).dividerColor.withOpacity(0.1), // very light border
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
@@ -445,6 +859,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
+  // ignore: unused_element
   Widget _buildProfileTile({
     required IconData icon,
     required Color iconColor,
@@ -467,18 +882,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         ),
         child: Icon(icon, color: iconColor, size: 22),
       ),
-      title: AutoScaledText(
+      title: Text(
         title,
         style: TextStyle(
-          fontSize: 15,
+          fontSize: scaledFontSize(13),
           fontWeight: FontWeight.w600,
           color: Theme.of(context).textTheme.bodyLarge?.color,
         ),
       ),
-      subtitle: AutoScaledText(
+      subtitle: Text(
         subtitle,
         style: TextStyle(
-          fontSize: 13,
+          fontSize: scaledFontSize(12),
           color: Theme.of(context).textTheme.bodyMedium?.color,
         ),
       ),
@@ -492,6 +907,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
+  // ignore: unused_element
   Widget _buildLogoutButton(BuildContext context) {
     return Container(
       width: double.infinity,
@@ -517,13 +933,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             padding: const EdgeInsets.symmetric(vertical: 16),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: const [
+              children: [
                 Icon(Icons.logout, color: Colors.white),
                 SizedBox(width: 12),
-                AutoScaledText(
+                Text(
                   'Logout',
                   style: TextStyle(
-                    fontSize: 16,
+                    fontSize: scaledFontSize(14),
                     fontWeight: FontWeight.w600,
                     color: Colors.white,
                   ),
@@ -568,19 +984,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               child: const Icon(Icons.logout, color: Colors.red, size: 32),
             ),
             const SizedBox(height: 16),
-            AutoScaledText(
+            Text(
               'Logout',
               style: TextStyle(
-                fontSize: 20,
+                fontSize: scaledFontSize(20),
                 fontWeight: FontWeight.bold,
                 color: Theme.of(ctx).textTheme.headlineSmall?.color,
               ),
             ),
             const SizedBox(height: 8),
-            AutoScaledText(
+            Text(
               'Are you sure you want to logout?',
               style: TextStyle(
-                fontSize: 14,
+                fontSize: scaledFontSize(14),
                 color: Theme.of(ctx).textTheme.bodyMedium?.color,
               ),
             ),
@@ -597,7 +1013,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       ),
                       side: BorderSide(color: Theme.of(ctx).dividerColor),
                     ),
-                    child: AutoScaledText(
+                    child: Text(
                       'Cancel',
                       style: TextStyle(
                         color: Theme.of(ctx).textTheme.bodyLarge?.color,
@@ -620,7 +1036,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: const AutoScaledText(
+                    child: const Text(
                       'Logout',
                       style: TextStyle(
                         color: Colors.white,
@@ -644,7 +1060,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     await authViewModel.logout();
 
     if (mounted) {
-      Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        '/gmail-sso',
+        (route) => false,
+      );
     }
   }
 
@@ -656,7 +1076,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       builder: (ctx) => Container(
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          color: Theme.of(ctx).cardColor,
+          color: Colors.white,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: Column(
@@ -674,10 +1094,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            AutoScaledText(
+            Text(
               'Personal Information',
               style: TextStyle(
-                fontSize: 20,
+                fontSize: scaledFontSize(20),
                 fontWeight: FontWeight.bold,
                 color: Theme.of(ctx).textTheme.headlineSmall?.color,
               ),
@@ -719,17 +1139,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          AutoScaledText(
+          Text(
             label,
             style: TextStyle(
-              fontSize: 14,
+              fontSize: scaledFontSize(14),
               color: Theme.of(context).textTheme.bodyMedium?.color,
             ),
           ),
-          AutoScaledText(
+          Text(
             value,
             style: TextStyle(
-              fontSize: 14,
+              fontSize: scaledFontSize(14),
               fontWeight: FontWeight.w600,
               color: Theme.of(context).textTheme.bodyLarge?.color,
             ),
@@ -739,6 +1159,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
+  // ignore: unused_element
   void _navigateToLanguageSelection(BuildContext context) {
     Navigator.pushNamed(context, '/language-selection').then((_) {
       // Reload data when returning from language screen
@@ -746,6 +1167,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     });
   }
 
+  // ignore: unused_element
   void _navigateToTopicsSelection(BuildContext context) {
     Navigator.pushNamed(context, '/topics-selection').then((_) {
       // Reload data when returning from topics screen
@@ -769,6 +1191,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     return 'Location not set';
   }
 
+  // ignore: unused_element
   String _getLanguageDisplayText() {
     if (_selectedLanguage != null) {
       return _selectedLanguage!['name'] ?? 'Language not set';
@@ -776,6 +1199,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     return 'Language not set';
   }
 
+  // ignore: unused_element
   String _getTopicsDisplayText() {
     if (_selectedTopics.isNotEmpty) {
       if (_selectedTopics.length == 1) {
@@ -787,13 +1211,158 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     return 'No topics selected';
   }
 
-  void _navigateToLocationChange(BuildContext context) {
-    Navigator.pushNamed(context, '/location-selection').then((_) {
-      // Reload location data when returning from location screen
-      _loadLocationData();
-    });
+  bool _isLocationPickerOpen = false;
+
+  void _showFullLocationPicker(BuildContext context) async {
+    if (_isLocationPickerOpen) return;
+    _isLocationPickerOpen = true;
+
+    final theme = Theme.of(context);
+    final locationVM = ref.read(locationViewModelProvider);
+
+    if (locationVM.states.isEmpty && !locationVM.isLoadingStates) {
+      await locationVM.loadStates();
+    }
+
+    if (!mounted) {
+      _isLocationPickerOpen = false;
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      isScrollControlled: true,
+      builder: (ctx) {
+        return SizedBox(
+          height: MediaQuery.of(ctx).size.height * 0.8,
+          child: _FullLocationPickerContent(
+            theme: theme,
+            states: locationVM.states,
+            locationVM: locationVM,
+            currentStateId: _selectedState?.id,
+            currentDistrictId: _selectedDistrict?.id,
+            currentMandalId: _selectedMandal?.id,
+            onSave: (state, district, mandal) async {
+              Navigator.pop(ctx);
+              final storage = OnboardingStorage();
+              await storage.saveSelectedLocation(state, district, mandal);
+              _loadLocationData();
+              final homeVM = ref.read(homeViewModelProvider);
+              homeVM.loadLocationData().then((_) => homeVM.loadNewsData());
+            },
+          ),
+        );
+      },
+    ).then((_) => _isLocationPickerOpen = false);
   }
 
+  void _showDistrictMandalPicker(BuildContext context, User? user) async {
+    if (user == null || user.stateId == null) return;
+    if (_isLocationPickerOpen) return;
+    _isLocationPickerOpen = true;
+
+    final theme = Theme.of(context);
+    final locationVM = ref.read(locationViewModelProvider);
+
+    await locationVM.loadDistricts(user.stateId!);
+
+    if (!mounted) {
+      _isLocationPickerOpen = false;
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      isScrollControlled: true,
+      builder: (ctx) {
+        return SizedBox(
+          height: MediaQuery.of(ctx).size.height * 0.75,
+          child: _DistrictMandalPickerContent(
+            theme: theme,
+            districts: locationVM.districts,
+            currentDistrictId: user.districtId,
+            currentMandalId: user.mandalId,
+            locationVM: locationVM,
+            onSave: (District district, Mandal mandal) async {
+              Navigator.pop(ctx);
+
+              final storage = OnboardingStorage();
+              final state = await storage.getSelectedState();
+              if (state != null) {
+                await storage.saveSelectedLocation(state, district, mandal);
+              }
+
+              _loadLocationData();
+              final homeVM = ref.read(homeViewModelProvider);
+              homeVM.loadLocationData().then((_) => homeVM.loadNewsData());
+            },
+          ),
+        );
+      },
+    ).then((_) => _isLocationPickerOpen = false);
+  }
+
+  void _showMandalPicker(BuildContext context, User? user) async {
+    if (user == null || user.districtId == null) return;
+    if (_isLocationPickerOpen) return;
+    _isLocationPickerOpen = true;
+
+    final theme = Theme.of(context);
+    final locationVM = ref.read(locationViewModelProvider);
+
+    // Load mandals for the dist-reporter's district
+    await locationVM.loadMandals(user.districtId!);
+
+    if (!mounted) return;
+
+    showModalBottomSheet(
+      // ignore: use_build_context_synchronously
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      isScrollControlled: true,
+      builder: (ctx) {
+        return SizedBox(
+          height: MediaQuery.of(ctx).size.height * 0.65,
+          child: _SearchableListPicker<Mandal>(
+            theme: theme,
+            title: 'Select Mandal',
+            subtitle:
+                'Your state & district stay the same. Pick a mandal to browse its news.',
+            icon: Icons.place_outlined,
+            items: locationVM.mandals,
+            getName: (m) => m.name,
+            selectedId: user.mandalId,
+            getId: (m) => m.id,
+            onSelected: (mandal) async {
+              Navigator.pop(ctx);
+              final storage = OnboardingStorage();
+              final state = await storage.getSelectedState();
+              final district = await storage.getSelectedDistrict();
+              if (state != null) {
+                await storage.saveSelectedLocation(state, district, mandal);
+              }
+              _loadLocationData();
+              final homeVM = ref.read(homeViewModelProvider);
+              homeVM.loadLocationData().then((_) => homeVM.loadNewsData());
+            },
+          ),
+        );
+      },
+    ).then((_) => _isLocationPickerOpen = false);
+  }
+
+  // ignore: unused_element
   void _showNotificationSettings(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -821,34 +1390,32 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-              AutoScaledText(
+              Text(
                 'Notification Settings',
                 style: TextStyle(
-                  fontSize: 20,
+                  fontSize: scaledFontSize(20),
                   fontWeight: FontWeight.bold,
                   color: theme.appTextPrimary,
                 ),
               ),
               const SizedBox(height: 16),
               SwitchListTile(
-                title: const AutoScaledText('Breaking News'),
-                subtitle: const AutoScaledText(
-                  'Get notified for breaking news',
-                ),
+                title: const Text('Breaking News'),
+                subtitle: const Text('Get notified for breaking news'),
                 value: true,
                 activeColor: theme.appPrimary,
                 onChanged: (value) {},
               ),
               SwitchListTile(
-                title: const AutoScaledText('Daily Digest'),
-                subtitle: const AutoScaledText('Receive daily news summary'),
+                title: const Text('Daily Digest'),
+                subtitle: const Text('Receive daily news summary'),
                 value: true,
                 activeColor: theme.appPrimary,
                 onChanged: (value) {},
               ),
               SwitchListTile(
-                title: const AutoScaledText('Sports Updates'),
-                subtitle: const AutoScaledText('Get live sports updates'),
+                title: const Text('Sports Updates'),
+                subtitle: const Text('Get live sports updates'),
                 value: false,
                 activeColor: theme.appPrimary,
                 onChanged: (value) {},
@@ -861,119 +1428,287 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  void _showFontSizeSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        final theme = Theme.of(ctx);
-        return Consumer(
-          builder: (context, ref, child) {
-            final fontController = ref.watch(fontControllerProvider);
-            final currentFontSize = fontController.currentFontSize;
+  // ignore: unused_element
+  void _showChangePasswordDialog(BuildContext context) {
+    final currentPasswordController = TextEditingController();
+    final newPasswordController = TextEditingController();
+    final confirmPasswordController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    bool isLoading = false;
+    bool obscureCurrent = true;
+    bool obscureNew = true;
+    bool obscureConfirm = true;
 
-            return Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: theme.cardColor,
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(24),
+    final theme = Theme.of(context);
+
+    InputDecoration buildInputDecoration({
+      required String label,
+      required String hint,
+      required IconData icon,
+      required bool obscure,
+      required VoidCallback onToggle,
+    }) {
+      return InputDecoration(
+        labelText: label,
+        hintText: hint,
+        labelStyle: TextStyle(
+          fontSize: scaledFontSize(13),
+          color: Colors.grey[600],
+        ),
+        hintStyle: TextStyle(
+          fontSize: scaledFontSize(13),
+          color: Colors.grey[400],
+        ),
+        prefixIcon: Icon(icon, size: 20, color: theme.appPrimary),
+        suffixIcon: IconButton(
+          icon: Icon(
+            obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+            size: 20,
+            color: Colors.grey[500],
+          ),
+          onPressed: onToggle,
+        ),
+        filled: true,
+        fillColor: Colors.grey[50],
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey[300]!),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey[300]!),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: theme.appPrimary, width: 1.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Colors.red),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Colors.red, width: 1.5),
+        ),
+        errorStyle: TextStyle(fontSize: scaledFontSize(11)),
+      );
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            backgroundColor: Colors.white,
+            surfaceTintColor: Colors.transparent,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+            contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+            actionsPadding: const EdgeInsets.fromLTRB(24, 12, 24, 20),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: theme.appPrimary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    Icons.lock_outline,
+                    color: theme.appPrimary,
+                    size: 22,
+                  ),
                 ),
-              ),
+                const SizedBox(width: 12),
+                Text(
+                  'Change Password',
+                  style: TextStyle(
+                    fontSize: scaledFontSize(18),
+                    fontWeight: FontWeight.w700,
+                    color: Colors.grey[900],
+                  ),
+                ),
+              ],
+            ),
+            content: Form(
+              key: formKey,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: theme.dividerColor,
-                        borderRadius: BorderRadius.circular(2),
+                  TextFormField(
+                    controller: currentPasswordController,
+                    obscureText: obscureCurrent,
+                    style: TextStyle(fontSize: scaledFontSize(14)),
+                    decoration: buildInputDecoration(
+                      label: 'Current Password',
+                      hint: 'Enter current password',
+                      icon: Icons.lock_outline,
+                      obscure: obscureCurrent,
+                      onToggle: () => setDialogState(
+                        () => obscureCurrent = !obscureCurrent,
+                      ),
+                    ),
+                    validator: (v) =>
+                        v == null || v.isEmpty ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 14),
+                  TextFormField(
+                    controller: newPasswordController,
+                    obscureText: obscureNew,
+                    style: TextStyle(fontSize: scaledFontSize(14)),
+                    decoration: buildInputDecoration(
+                      label: 'New Password',
+                      hint: 'Enter new password',
+                      icon: Icons.lock_reset,
+                      obscure: obscureNew,
+                      onToggle: () =>
+                          setDialogState(() => obscureNew = !obscureNew),
+                    ),
+                    validator: (v) {
+                      if (v == null || v.isEmpty) return 'Required';
+                      if (v.length < 6) return 'Minimum 6 characters';
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 14),
+                  TextFormField(
+                    controller: confirmPasswordController,
+                    obscureText: obscureConfirm,
+                    style: TextStyle(fontSize: scaledFontSize(14)),
+                    decoration: buildInputDecoration(
+                      label: 'Confirm New Password',
+                      hint: 'Re-enter new password',
+                      icon: Icons.lock_reset,
+                      obscure: obscureConfirm,
+                      onToggle: () => setDialogState(
+                        () => obscureConfirm = !obscureConfirm,
+                      ),
+                    ),
+                    validator: (v) {
+                      if (v == null || v.isEmpty) return 'Required';
+                      if (v != newPasswordController.text) {
+                        return 'Passwords do not match';
+                      }
+                      return null;
+                    },
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: isLoading
+                          ? null
+                          : () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        side: BorderSide(color: Colors.grey[300]!),
+                      ),
+                      child: Text(
+                        'Cancel',
+                        style: TextStyle(
+                          fontSize: scaledFontSize(14),
+                          color: Colors.grey[700],
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  AutoScaledText(
-                    'Font Size',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: theme.textTheme.headlineSmall?.color,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: isLoading
+                          ? null
+                          : () async {
+                              if (!formKey.currentState!.validate()) return;
+
+                              setDialogState(() => isLoading = true);
+
+                              final authRepo = AuthRepositoryImpl();
+                              final success = await authRepo.changePassword(
+                                currentPassword: currentPasswordController.text,
+                                newPassword: newPasswordController.text,
+                                newPasswordConfirmation:
+                                    confirmPasswordController.text,
+                              );
+
+                              setDialogState(() => isLoading = false);
+
+                              if (context.mounted) {
+                                if (success) {
+                                  Navigator.pop(context);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: const Text(
+                                        'Password changed successfully',
+                                      ),
+                                      backgroundColor: Colors.green[600],
+                                      behavior: SnackBarBehavior.floating,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                    ),
+                                  );
+                                } else {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: const Text(
+                                        'Failed to change password. Check your current password.',
+                                      ),
+                                      backgroundColor: Colors.red[600],
+                                      behavior: SnackBarBehavior.floating,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                    ),
+                                  );
+                                }
+                              }
+                            },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: theme.appPrimary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: isLoading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : Text(
+                              'Change',
+                              style: TextStyle(
+                                fontSize: scaledFontSize(14),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: FontSize.values.map((fontSize) {
-                      return _buildFontSizeOption(
-                        ctx,
-                        fontSize.displayName,
-                        fontSize.scale,
-                        currentFontSize == fontSize,
-                        () async {
-                          await ref
-                              .read(fontControllerProvider)
-                              .setFontSize(fontSize);
-                          Navigator.pop(ctx);
-                        },
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 24),
                 ],
               ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildFontSizeOption(
-    BuildContext ctx,
-    String label,
-    double scale,
-    bool isSelected,
-    VoidCallback onTap,
-  ) {
-    final theme = Theme.of(ctx);
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-        decoration: BoxDecoration(
-          color: isSelected ? theme.primaryColor : theme.cardColor,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? theme.primaryColor : theme.dividerColor,
-          ),
-        ),
-        child: Column(
-          children: [
-            AutoScaledText(
-              'Aa',
-              style: TextStyle(
-                fontSize: 16 * scale,
-                fontWeight: FontWeight.bold,
-                color: isSelected
-                    ? Colors.white
-                    : theme.textTheme.bodyLarge?.color,
-              ),
-            ),
-            const SizedBox(height: 4),
-            AutoScaledText(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                color: isSelected
-                    ? Colors.white
-                    : theme.textTheme.bodyMedium?.color,
-              ),
-            ),
-          ],
-        ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -1003,30 +1738,36 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ),
               ),
               const SizedBox(width: 12),
-              const AutoScaledText('Deep Pulse News'),
+              const Text('Deep Pulse News'),
             ],
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const AutoScaledText('Version 1.0.0'),
+              const Text('Version 1.0.0'),
               const SizedBox(height: 8),
-              AutoScaledText(
+              Text(
                 'Stay updated with the latest news from around the world. Deep Pulse News brings you breaking news, trending stories, and personalized content.',
-                style: TextStyle(fontSize: 14, color: theme.appTextSecondary),
+                style: TextStyle(
+                  fontSize: scaledFontSize(14),
+                  color: theme.appTextSecondary,
+                ),
               ),
               const SizedBox(height: 16),
-              AutoScaledText(
+              Text(
                 '© 2026 Deep Pulse News',
-                style: TextStyle(fontSize: 12, color: theme.appTextLight),
+                style: TextStyle(
+                  fontSize: scaledFontSize(12),
+                  color: theme.appTextLight,
+                ),
               ),
             ],
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const AutoScaledText('Close'),
+              child: const Text('Close'),
             ),
           ],
         );
@@ -1034,12 +1775,980 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
+  // ignore: unused_element
   Widget _buildDivider() {
     return Divider(
       height: 1,
       indent: 76,
       endIndent: 16,
       color: Theme.of(context).appDivider,
+    );
+  }
+}
+
+class _DistrictMandalPickerContent extends StatefulWidget {
+  final ThemeData theme;
+  final List<District> districts;
+  final int? currentDistrictId;
+  final int? currentMandalId;
+  final dynamic locationVM;
+  final void Function(District district, Mandal mandal) onSave;
+
+  const _DistrictMandalPickerContent({
+    required this.theme,
+    required this.districts,
+    required this.currentDistrictId,
+    required this.currentMandalId,
+    required this.locationVM,
+    required this.onSave,
+  });
+
+  @override
+  State<_DistrictMandalPickerContent> createState() =>
+      _DistrictMandalPickerContentState();
+}
+
+class _DistrictMandalPickerContentState
+    extends State<_DistrictMandalPickerContent> {
+  District? _pickedDistrict;
+  Mandal? _pickedMandal;
+  List<Mandal> _mandals = [];
+  bool _isLoadingMandals = false;
+  String _districtQuery = '';
+  String _mandalQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    // Pre-select current district
+    if (widget.currentDistrictId != null && widget.districts.isNotEmpty) {
+      _pickedDistrict = widget.districts
+          .where((d) => d.id == widget.currentDistrictId)
+          .firstOrNull;
+      if (_pickedDistrict != null) {
+        _loadMandals(_pickedDistrict!.id);
+      }
+    }
+  }
+
+  Future<void> _loadMandals(int districtId) async {
+    setState(() => _isLoadingMandals = true);
+    await widget.locationVM.loadMandals(districtId);
+    if (mounted) {
+      setState(() {
+        _mandals = List.from(widget.locationVM.mandals);
+        _isLoadingMandals = false;
+        // Pre-select current mandal if in this district
+        if (widget.currentMandalId != null) {
+          _pickedMandal = _mandals
+              .where((m) => m.id == widget.currentMandalId)
+              .firstOrNull;
+        }
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = widget.theme;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+          child: Row(
+            children: [
+              Icon(
+                Icons.location_city_outlined,
+                size: 20,
+                color: theme.appPrimary,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Change Location',
+                style: TextStyle(
+                  fontSize: scaledFontSize(16),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Text(
+            'Your state stays the same. Pick a district and mandal.',
+            style: TextStyle(
+              fontSize: scaledFontSize(12),
+              color: theme.appTextSecondary,
+            ),
+          ),
+        ),
+        const Divider(),
+
+        // District search + list
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'District',
+              style: TextStyle(
+                fontSize: scaledFontSize(13),
+                fontWeight: FontWeight.w600,
+                color: theme.appTextSecondary,
+              ),
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: TextField(
+            onChanged: (v) => setState(() => _districtQuery = v),
+            style: TextStyle(fontSize: scaledFontSize(13)),
+            decoration: InputDecoration(
+              hintText: 'Search districts...',
+              hintStyle: TextStyle(
+                color: theme.appTextLight,
+                fontSize: scaledFontSize(13),
+              ),
+              prefixIcon: Icon(
+                Icons.search,
+                size: 18,
+                color: theme.appTextLight,
+              ),
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 8,
+              ),
+              isDense: true,
+            ),
+          ),
+        ),
+        SizedBox(
+          height: 42,
+          child: Builder(
+            builder: (_) {
+              final filtered = _districtQuery.isEmpty
+                  ? widget.districts
+                  : widget.districts
+                        .where(
+                          (d) => d.name.toLowerCase().contains(
+                            _districtQuery.toLowerCase(),
+                          ),
+                        )
+                        .toList();
+              return ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: filtered.length,
+                itemBuilder: (_, i) {
+                  final d = filtered[i];
+                  final isSelected = _pickedDistrict?.id == d.id;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _pickedDistrict = d;
+                          _pickedMandal = null;
+                          _mandalQuery = '';
+                        });
+                        _loadMandals(d.id);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? theme.appPrimary
+                              : theme.cardColor,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: isSelected
+                                ? theme.appPrimary
+                                : theme.dividerColor,
+                          ),
+                        ),
+                        child: Text(
+                          d.name,
+                          style: TextStyle(
+                            fontSize: scaledFontSize(12),
+                            fontWeight: FontWeight.w600,
+                            color: isSelected
+                                ? Colors.white
+                                : theme.appTextSecondary,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 8),
+
+        // Mandal search + list
+        if (_pickedDistrict != null) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Mandal',
+                style: TextStyle(
+                  fontSize: scaledFontSize(13),
+                  fontWeight: FontWeight.w600,
+                  color: theme.appTextSecondary,
+                ),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: TextField(
+              onChanged: (v) => setState(() => _mandalQuery = v),
+              style: TextStyle(fontSize: scaledFontSize(13)),
+              decoration: InputDecoration(
+                hintText: 'Search mandals...',
+                hintStyle: TextStyle(
+                  color: theme.appTextLight,
+                  fontSize: scaledFontSize(13),
+                ),
+                prefixIcon: Icon(
+                  Icons.search,
+                  size: 18,
+                  color: theme.appTextLight,
+                ),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                isDense: true,
+              ),
+            ),
+          ),
+          if (_isLoadingMandals)
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else
+            Flexible(
+              child: Builder(
+                builder: (_) {
+                  final filtered = _mandalQuery.isEmpty
+                      ? _mandals
+                      : _mandals
+                            .where(
+                              (m) => m.name.toLowerCase().contains(
+                                _mandalQuery.toLowerCase(),
+                              ),
+                            )
+                            .toList();
+                  return ListView.builder(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: filtered.length,
+                    itemBuilder: (_, i) {
+                      final m = filtered[i];
+                      final isSelected = _pickedMandal?.id == m.id;
+                      return ListTile(
+                        dense: true,
+                        title: Text(
+                          m.name,
+                          style: TextStyle(
+                            fontSize: scaledFontSize(14),
+                            fontWeight: isSelected
+                                ? FontWeight.w700
+                                : FontWeight.normal,
+                            color: isSelected ? theme.appPrimary : null,
+                          ),
+                        ),
+                        trailing: isSelected
+                            ? Icon(
+                                Icons.check,
+                                size: 18,
+                                color: theme.appPrimary,
+                              )
+                            : null,
+                        onTap: () => setState(() => _pickedMandal = m),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+        ],
+
+        // Save button
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _pickedDistrict != null && _pickedMandal != null
+                  ? () => widget.onSave(_pickedDistrict!, _pickedMandal!)
+                  : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: theme.appPrimary,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              child: const Text(
+                'Save Location',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SearchableListPicker<T> extends StatefulWidget {
+  final ThemeData theme;
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final List<T> items;
+  final String Function(T) getName;
+  final int Function(T) getId;
+  final int? selectedId;
+  final void Function(T) onSelected;
+
+  const _SearchableListPicker({
+    required this.theme,
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.items,
+    required this.getName,
+    required this.getId,
+    required this.onSelected,
+    this.selectedId,
+  });
+
+  @override
+  State<_SearchableListPicker<T>> createState() =>
+      _SearchableListPickerState<T>();
+}
+
+class _SearchableListPickerState<T> extends State<_SearchableListPicker<T>> {
+  String _query = '';
+
+  List<T> get _filtered {
+    if (_query.isEmpty) return widget.items;
+    final q = _query.toLowerCase();
+    return widget.items
+        .where((item) => widget.getName(item).toLowerCase().contains(q))
+        .toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = widget.theme;
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+            child: Row(
+              children: [
+                Icon(widget.icon, size: 20, color: theme.appPrimary),
+                const SizedBox(width: 8),
+                Text(
+                  widget.title,
+                  style: TextStyle(
+                    fontSize: scaledFontSize(16),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Text(
+              widget.subtitle,
+              style: TextStyle(
+                fontSize: scaledFontSize(12),
+                color: theme.appTextSecondary,
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: TextField(
+              autofocus: true,
+              onChanged: (v) => setState(() => _query = v),
+              style: TextStyle(fontSize: scaledFontSize(14)),
+              decoration: InputDecoration(
+                hintText: 'Search...',
+                hintStyle: TextStyle(
+                  color: theme.appTextLight,
+                  fontSize: scaledFontSize(14),
+                ),
+                prefixIcon: Icon(
+                  Icons.search,
+                  color: theme.appTextLight,
+                  size: 20,
+                ),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+              ),
+            ),
+          ),
+          const Divider(height: 1),
+          Flexible(
+            child: _filtered.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(
+                      'No results found',
+                      style: TextStyle(
+                        fontSize: scaledFontSize(14),
+                        color: theme.appTextLight,
+                      ),
+                    ),
+                  )
+                : ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: _filtered.length,
+                    itemBuilder: (_, i) {
+                      final item = _filtered[i];
+                      final isSelected =
+                          widget.selectedId == widget.getId(item);
+                      return ListTile(
+                        dense: true,
+                        title: Text(
+                          widget.getName(item),
+                          style: TextStyle(
+                            fontSize: scaledFontSize(14),
+                            fontWeight: isSelected
+                                ? FontWeight.w700
+                                : FontWeight.normal,
+                            color: isSelected ? theme.appPrimary : null,
+                          ),
+                        ),
+                        trailing: isSelected
+                            ? Icon(
+                                Icons.check,
+                                size: 18,
+                                color: theme.appPrimary,
+                              )
+                            : null,
+                        onTap: () => widget.onSelected(item),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FullLocationPickerContent extends StatefulWidget {
+  final ThemeData theme;
+  final List<location_models.State> states;
+  final dynamic locationVM;
+  final int? currentStateId;
+  final int? currentDistrictId;
+  final int? currentMandalId;
+  final void Function(
+    location_models.State state,
+    District district,
+    Mandal mandal,
+  )
+  onSave;
+
+  const _FullLocationPickerContent({
+    required this.theme,
+    required this.states,
+    required this.locationVM,
+    required this.onSave,
+    this.currentStateId,
+    this.currentDistrictId,
+    this.currentMandalId,
+  });
+
+  @override
+  State<_FullLocationPickerContent> createState() =>
+      _FullLocationPickerContentState();
+}
+
+class _FullLocationPickerContentState
+    extends State<_FullLocationPickerContent> {
+  location_models.State? _pickedState;
+  District? _pickedDistrict;
+  Mandal? _pickedMandal;
+  List<District> _districts = [];
+  List<Mandal> _mandals = [];
+  bool _isLoadingDistricts = false;
+  bool _isLoadingMandals = false;
+  String _stateQuery = '';
+  String _districtQuery = '';
+  String _mandalQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.currentStateId != null && widget.states.isNotEmpty) {
+      _pickedState = widget.states
+          .where((s) => s.id == widget.currentStateId)
+          .firstOrNull;
+      if (_pickedState != null) {
+        _loadDistricts(_pickedState!.id);
+      }
+    }
+  }
+
+  Future<void> _loadDistricts(int stateId) async {
+    setState(() => _isLoadingDistricts = true);
+    await widget.locationVM.loadDistricts(stateId);
+    if (mounted) {
+      setState(() {
+        _districts = List.from(widget.locationVM.districts);
+        _isLoadingDistricts = false;
+        if (widget.currentDistrictId != null) {
+          _pickedDistrict = _districts
+              .where((d) => d.id == widget.currentDistrictId)
+              .firstOrNull;
+          if (_pickedDistrict != null) {
+            _loadMandals(_pickedDistrict!.id);
+          }
+        }
+      });
+    }
+  }
+
+  Future<void> _loadMandals(int districtId) async {
+    setState(() => _isLoadingMandals = true);
+    await widget.locationVM.loadMandals(districtId);
+    if (mounted) {
+      setState(() {
+        _mandals = List.from(widget.locationVM.mandals);
+        _isLoadingMandals = false;
+        if (widget.currentMandalId != null) {
+          _pickedMandal = _mandals
+              .where((m) => m.id == widget.currentMandalId)
+              .firstOrNull;
+        }
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = widget.theme;
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+          child: Row(
+            children: [
+              Icon(
+                Icons.location_on_outlined,
+                size: 20,
+                color: theme.appPrimary,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Change Location',
+                style: TextStyle(
+                  fontSize: scaledFontSize(16),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const Divider(),
+
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            children: [
+              // ── State ──
+              Text(
+                'State',
+                style: TextStyle(
+                  fontSize: scaledFontSize(13),
+                  fontWeight: FontWeight.w600,
+                  color: theme.appTextSecondary,
+                ),
+              ),
+              const SizedBox(height: 4),
+              TextField(
+                onChanged: (v) => setState(() => _stateQuery = v),
+                style: TextStyle(fontSize: scaledFontSize(13)),
+                decoration: InputDecoration(
+                  hintText: 'Search states...',
+                  hintStyle: TextStyle(
+                    color: theme.appTextLight,
+                    fontSize: scaledFontSize(13),
+                  ),
+                  prefixIcon: Icon(
+                    Icons.search,
+                    size: 18,
+                    color: theme.appTextLight,
+                  ),
+                  border: InputBorder.none,
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                ),
+              ),
+              SizedBox(height: 5),
+              SizedBox(
+                height: 42,
+                child: Builder(
+                  builder: (_) {
+                    final filtered = _stateQuery.isEmpty
+                        ? widget.states
+                        : widget.states
+                              .where(
+                                (s) => s.name.toLowerCase().contains(
+                                  _stateQuery.toLowerCase(),
+                                ),
+                              )
+                              .toList();
+                    return ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: filtered.length,
+                      itemBuilder: (_, i) {
+                        final s = filtered[i];
+                        final isSelected = _pickedState?.id == s.id;
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: InkWell(
+                            onTap: () {
+                              setState(() {
+                                _pickedState = s;
+                                _pickedDistrict = null;
+                                _pickedMandal = null;
+                                _districts = [];
+                                _mandals = [];
+                                _districtQuery = '';
+                                _mandalQuery = '';
+                              });
+                              _loadDistricts(s.id);
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? theme.appPrimary
+                                    : Colors.white,
+                                borderRadius: BorderRadius.circular(8),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(
+                                      0.08,
+                                    ), // light shadow
+                                    blurRadius: 6,
+                                    offset: const Offset(
+                                      0,
+                                      2,
+                                    ), // downward shadow
+                                  ),
+                                ],
+                                border: Border.all(
+                                  color: theme.dividerColor.withOpacity(
+                                    0.2,
+                                  ), // very light border
+                                  width: 1,
+                                ),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  s.name,
+                                  style: TextStyle(
+                                    fontSize: scaledFontSize(12),
+                                    fontWeight: FontWeight.w600,
+                                    color: isSelected
+                                        ? Colors.white
+                                        : theme.appTextSecondary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 10),
+
+              // ── District ──
+              if (_pickedState != null) ...[
+                Text(
+                  'District',
+                  style: TextStyle(
+                    fontSize: scaledFontSize(13),
+                    fontWeight: FontWeight.w600,
+                    color: theme.appTextSecondary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                TextField(
+                  onChanged: (v) => setState(() => _districtQuery = v),
+                  style: TextStyle(fontSize: scaledFontSize(13)),
+                  decoration: InputDecoration(
+                    hintText: 'Search districts...',
+                    hintStyle: TextStyle(
+                      color: theme.appTextLight,
+                      fontSize: scaledFontSize(13),
+                    ),
+                    prefixIcon: Icon(
+                      Icons.search,
+                      size: 18,
+                      color: theme.appTextLight,
+                    ),
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 5),
+
+                if (_isLoadingDistricts)
+                  const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else
+                  SizedBox(
+                    height: 42,
+                    child: Builder(
+                      builder: (_) {
+                        final filtered = _districtQuery.isEmpty
+                            ? _districts
+                            : _districts
+                                  .where(
+                                    (d) => d.name.toLowerCase().contains(
+                                      _districtQuery.toLowerCase(),
+                                    ),
+                                  )
+                                  .toList();
+                        return ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: filtered.length,
+                          itemBuilder: (_, i) {
+                            final d = filtered[i];
+                            final isSelected = _pickedDistrict?.id == d.id;
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    _pickedDistrict = d;
+                                    _pickedMandal = null;
+                                    _mandals = [];
+                                    _mandalQuery = '';
+                                  });
+                                  _loadMandals(d.id);
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 8,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? theme.appPrimary
+                                        : Colors.white,
+                                    borderRadius: BorderRadius.circular(8),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(
+                                          0.08,
+                                        ), // light shadow
+                                        blurRadius: 6,
+                                        offset: const Offset(
+                                          0,
+                                          2,
+                                        ), // downward shadow
+                                      ),
+                                    ],
+                                    border: Border.all(
+                                      color: theme.dividerColor.withOpacity(
+                                        0.2,
+                                      ), // very light border
+                                      width: 1,
+                                    ),
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      d.name,
+                                      style: TextStyle(
+                                        fontSize: scaledFontSize(12),
+                                        fontWeight: FontWeight.w600,
+                                        color: isSelected
+                                            ? Colors.white
+                                            : theme.appTextSecondary,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                const SizedBox(height: 16),
+              ],
+
+              // ── Mandal ──
+              if (_pickedDistrict != null) ...[
+                Text(
+                  'Mandal',
+                  style: TextStyle(
+                    fontSize: scaledFontSize(13),
+                    fontWeight: FontWeight.w600,
+                    color: theme.appTextSecondary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                TextField(
+                  onChanged: (v) => setState(() => _mandalQuery = v),
+                  style: TextStyle(fontSize: scaledFontSize(13)),
+                  decoration: InputDecoration(
+                    hintText: 'Search mandals...',
+                    hintStyle: TextStyle(
+                      color: theme.appTextLight,
+                      fontSize: scaledFontSize(13),
+                    ),
+                    prefixIcon: Icon(
+                      Icons.search,
+                      size: 18,
+                      color: theme.appTextLight,
+                    ),
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                  ),
+                ),
+                if (_isLoadingMandals)
+                  const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else
+                  Builder(
+                    builder: (_) {
+                      final filtered = _mandalQuery.isEmpty
+                          ? _mandals
+                          : _mandals
+                                .where(
+                                  (m) => m.name.toLowerCase().contains(
+                                    _mandalQuery.toLowerCase(),
+                                  ),
+                                )
+                                .toList();
+                      return Column(
+                        children: filtered.map((m) {
+                          final isSelected = _pickedMandal?.id == m.id;
+                          return ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(
+                              m.name,
+                              style: TextStyle(
+                                fontSize: scaledFontSize(14),
+                                fontWeight: isSelected
+                                    ? FontWeight.w700
+                                    : FontWeight.normal,
+                                color: isSelected ? theme.appPrimary : null,
+                              ),
+                            ),
+                            trailing: isSelected
+                                ? Icon(
+                                    Icons.check,
+                                    size: 18,
+                                    color: theme.appPrimary,
+                                  )
+                                : null,
+                            onTap: () => setState(() => _pickedMandal = m),
+                          );
+                        }).toList(),
+                      );
+                    },
+                  ),
+              ],
+            ],
+          ),
+        ),
+
+        // Save button
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed:
+                  _pickedState != null &&
+                      _pickedDistrict != null &&
+                      _pickedMandal != null
+                  ? () => widget.onSave(
+                      _pickedState!,
+                      _pickedDistrict!,
+                      _pickedMandal!,
+                    )
+                  : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: theme.appPrimary,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              child: const Text(
+                'Save Location',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

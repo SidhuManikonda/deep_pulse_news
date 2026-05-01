@@ -3,10 +3,11 @@ import 'package:deep_pulse_news/core/services/onboarding_storage.dart';
 import 'package:deep_pulse_news/navigators/onboarding_navigator.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:permission_handler/permission_handler.dart';
 
-import '../../core/constants/app_colors.dart';
+import '../../core/constants/app_font_sizes.dart';
 import '../../core/utils/onboarding_manager.dart';
-import '../../shared/widgets/alert_popup.dart';
+import '../../shared/widgets/app_logo.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -25,20 +26,6 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   void initState() {
     super.initState();
 
-    // Initialize AlertPopupManager with overlay
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        try {
-          final overlay = Overlay.of(context);
-          AlertPopupManager().initialize(overlay);
-        } catch (e) {
-          debugPrint(
-            'SplashScreen: Failed to initialize AlertPopupManager: $e',
-          );
-        }
-      }
-    });
-
     _animationController = AnimationController(
       duration: const Duration(seconds: 2),
       vsync: this,
@@ -56,8 +43,20 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     _checkAuthAndNavigate();
   }
 
+  Future<void> _requestPermissions() async {
+    await [
+      Permission.camera,
+      Permission.photos,
+      Permission.videos,
+      Permission.storage,
+    ].request();
+  }
+
   Future<void> _checkAuthAndNavigate() async {
-    await Future.delayed(const Duration(seconds: 3));
+    await Future.wait([
+      Future.delayed(const Duration(seconds: 3)),
+      _requestPermissions(),
+    ]);
 
     if (!mounted) return;
 
@@ -66,7 +65,6 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       final onboardingManager = OnboardingManager(OnboardingStorage());
       final step = await onboardingManager.getCurrentStep();
       OnboardingNavigator.navigate(context, step);
-    
     } catch (e) {
       print('Error during onboarding check: $e');
       // Fallback to location selection if anything fails
@@ -97,33 +95,12 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Container(
-                      width: 120,
-                      height: 120,
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).appPrimary,
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Theme.of(
-                              context,
-                            ).appPrimary.withOpacity(0.3),
-                            blurRadius: 20,
-                            offset: const Offset(0, 10),
-                          ),
-                        ],
-                      ),
-                      child: Icon(
-                        Icons.newspaper,
-                        size: 60,
-                        color: Theme.of(context).appTextWhite,
-                      ),
-                    ),
+                    AppLogo(size: 80),
                     const SizedBox(height: 24),
                     Text(
                       'Deep Pulse News',
                       style: TextStyle(
-                        fontSize: 32,
+                        fontSize: scaledFontSize(32),
                         fontWeight: FontWeight.bold,
                         color: Theme.of(context).textTheme.headlineLarge?.color,
                       ),
@@ -132,7 +109,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                     Text(
                       'Stay Updated with Latest News',
                       style: TextStyle(
-                        fontSize: 16,
+                        fontSize: scaledFontSize(16),
                         color: Theme.of(context).textTheme.bodyMedium?.color,
                       ),
                     ),

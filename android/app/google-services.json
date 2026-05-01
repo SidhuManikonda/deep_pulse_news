@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "703254694314",
+    "project_id": "deep-pulse-news",
+    "storage_bucket": "deep-pulse-news.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:703254694314:android:a96a2de66e4d44f0af43d3",
+        "android_client_info": {
+          "package_name": "com.example.deep_pulse_news"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "703254694314-mrrham53ai34lvpg40qqj7jg2h8ke8kt.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.deep_pulse_news",
+            "certificate_hash": "882e8ac7e8834bfa0e434698c3e96f23ded597ee"
+          }
+        },
+        {
+          "client_id": "703254694314-oiulcsg77m85arnib2s5hlpr0978qcvh.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCwcMZSVYsR-KkM6gsFR_56OXSx959LI5c"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "703254694314-oiulcsg77m85arnib2s5hlpr0978qcvh.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

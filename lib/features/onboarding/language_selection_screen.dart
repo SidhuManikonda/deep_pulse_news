@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/app_providers.dart';
 import '../../shared/widgets/custom_button.dart';
 import '../../shared/widgets/shimmer_widget.dart';
+import '../../core/constants/app_font_sizes.dart';
 
 class LanguageSelectionScreen extends ConsumerStatefulWidget {
   const LanguageSelectionScreen({super.key});
@@ -53,12 +54,12 @@ class _LanguageSelectionScreenState
                       color: const Color(0xFF2196F3),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Center(
+                    child: Center(
                       child: Text(
                         'A',
                         style: TextStyle(
                           color: Colors.white,
-                          fontSize: 28,
+                          fontSize: scaledFontSize(28),
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -75,10 +76,10 @@ class _LanguageSelectionScreenState
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: Colors.grey[300]!),
                     ),
-                    child: const Text(
+                    child: Text(
                       'अ',
                       style: TextStyle(
-                        fontSize: 20,
+                        fontSize: scaledFontSize(20),
                         fontWeight: FontWeight.w500,
                         color: Colors.black87,
                       ),
@@ -90,7 +91,7 @@ class _LanguageSelectionScreenState
               Text(
                 'Select Language',
                 style: TextStyle(
-                  fontSize: 28,
+                  fontSize: scaledFontSize(28),
                   fontWeight: FontWeight.bold,
                   color: Theme.of(context).textTheme.headlineLarge?.color,
                 ),
@@ -103,7 +104,7 @@ class _LanguageSelectionScreenState
               Text(
                 'Language not available?',
                 style: TextStyle(
-                  fontSize: 16,
+                  fontSize: scaledFontSize(16),
                   color: Theme.of(context).appGrey600,
                 ),
               ),
@@ -172,7 +173,7 @@ class _LanguageSelectionScreenState
             Text(
               'Failed to load languages',
               style: TextStyle(
-                fontSize: 18,
+                fontSize: scaledFontSize(18),
                 fontWeight: FontWeight.w600,
                 color: Theme.of(context).appPrimary,
               ),
@@ -181,7 +182,7 @@ class _LanguageSelectionScreenState
             Text(
               'Please check your internet connection and try again.',
               style: TextStyle(
-                fontSize: 14,
+                fontSize: scaledFontSize(14),
                 color: Theme.of(context).appGrey300,
               ),
               textAlign: TextAlign.center,
@@ -199,10 +200,10 @@ class _LanguageSelectionScreenState
     }
 
     if (!languageViewModel.hasLanguages) {
-      return const Center(
+      return Center(
         child: Text(
           'No languages available',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+          style: TextStyle(fontSize: scaledFontSize(18), fontWeight: FontWeight.w600),
         ),
       );
     }
@@ -251,14 +252,14 @@ class _LanguageSelectionScreenState
                     children: [
                       Text(
                         languageViewModel.getFlagForLanguage(language.slug),
-                        style: const TextStyle(fontSize: 20),
+                        style: TextStyle(fontSize: scaledFontSize(20)),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           _getLanguageDisplayName(language.name),
                           style: TextStyle(
-                            fontSize: 18,
+                            fontSize: scaledFontSize(18),
                             fontWeight: FontWeight.w600,
                             color: isSelected
                                 ? const Color(0xFF2196F3)
@@ -272,7 +273,7 @@ class _LanguageSelectionScreenState
                   Text(
                     _getLanguageSubtitle(language.name),
                     style: TextStyle(
-                      fontSize: 14,
+                      fontSize: scaledFontSize(14),
                       color: Colors.grey[600],
                       fontWeight: FontWeight.w400,
                     ),

@@ -7,6 +7,12 @@ import '../../core/services/onboarding_storage.dart';
 import '../../data/models/auth_response.dart';
 import '../../data/models/user.dart';
 import '../../data/repositories/auth_repository.dart';
+import '../../data/models/state.dart' as location_models;
+import '../../data/models/district.dart';
+import '../../data/models/mandal.dart';
+import '../../data/repositories/state_repository.dart';
+import '../../data/repositories/district_repository.dart';
+import '../../data/repositories/mandal_repository.dart';
 import '../../shared/widgets/alert_popup.dart';
 
 class AuthViewModel extends ChangeNotifier {
@@ -39,14 +45,13 @@ class AuthViewModel extends ChangeNotifier {
   Future<void> initializeAuth() async {
     try {
       final storedToken = await _authStorage.getToken();
-        print("Token:${storedToken.toString()}");
 
       if (storedToken == null) {
         _resetAuthState();
         notifyListeners();
         return;
       }
-
+  
       _token = storedToken;
       _isAuthenticated = true;
 
@@ -59,6 +64,17 @@ class AuthViewModel extends ChangeNotifier {
         return;
       }
 
+      // If user has been blocked by admin, auto-logout
+      if (_user!.isBlockedByAdmin) {
+        await logout();
+        AlertPopupManager().showAlert(
+          title: 'Account Blocked',
+          message: 'Your account has been blocked by admin. Please contact support.',
+          type: AlertType.error,
+        );
+        return;
+      }
+
       notifyListeners();
     } catch (e) {
       _resetAuthState();
@@ -68,13 +84,13 @@ class AuthViewModel extends ChangeNotifier {
   }
 
   // ===================== LOGIN =====================
-  Future<bool> login({required String email, required String password}) async {
+  Future<bool> login({required String mobile, required String password}) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
 
     try {
-      final request = LoginRequest(email: email, password: password);
+      final request = LoginRequest(mobile: mobile, password: password);
       final response = await _authRepository.login(request);
 
       if (response == null) {
@@ -84,7 +100,20 @@ class AuthViewModel extends ChangeNotifier {
         return false;
       }
 
-      _applyAuthSuccess(response);
+      // Block login if user is blocked by admin
+      if (response.user.isBlockedByAdmin) {
+        _error = 'Your account has been blocked by admin. Please contact support.';
+        _isLoading = false;
+        notifyListeners();
+        AlertPopupManager().showAlert(
+          title: 'Account Blocked',
+          message: 'Your account has been blocked by admin. Please contact support.',
+          type: AlertType.error,
+        );
+        return false;
+      }
+
+      await _applyAuthSuccess(response);
 
       AlertPopupManager().showAlert(
         title: 'Login Successful',
@@ -114,12 +143,20 @@ class AuthViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
+      // Read location data from onboarding storage
+      final selectedState = await _onboardingStorage.getSelectedState();
+      final selectedDistrict = await _onboardingStorage.getSelectedDistrict();
+      final selectedMandal = await _onboardingStorage.getSelectedMandal();
+
       final request = RegisterRequest(
         name: name,
         email: email,
         mobile: mobile,
         password: password,
         passwordConfirmation: passwordConfirmation,
+        stateId: selectedState?.id,
+        districtId: selectedDistrict?.id,
+        mandalId: selectedMandal?.id,
       );
 
       final response = await _authRepository.register(request);
@@ -131,11 +168,68 @@ class AuthViewModel extends ChangeNotifier {
         return false;
       }
 
-      _applyAuthSuccess(response);
+      await _applyAuthSuccess(response);
 
       AlertPopupManager().showAlert(
         title: 'Registration Successful',
         message: 'Your account has been created successfully!',
+        type: AlertType.success,
+      );
+
+      return true;
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // ===================== GOOGLE LOGIN =====================
+  Future<bool> googleLogin({
+    required String idToken,
+    required int stateId,
+    required int districtId,
+    required int mandalId,
+    String? mobile,
+  }) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final response = await _authRepository.googleLogin(
+        idToken: idToken,
+        stateId: stateId,
+        districtId: districtId,
+        mandalId: mandalId,
+        mobile: mobile,
+      );
+
+      if (response == null) {
+        _error = 'Google login failed';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+
+      if (response.user.isBlockedByAdmin) {
+        _error = 'Your account has been blocked by admin. Please contact support.';
+        _isLoading = false;
+        notifyListeners();
+        AlertPopupManager().showAlert(
+          title: 'Account Blocked',
+          message: 'Your account has been blocked by admin. Please contact support.',
+          type: AlertType.error,
+        );
+        return false;
+      }
+
+      await _applyAuthSuccess(response);
+
+      AlertPopupManager().showAlert(
+        title: 'Login Successful',
+        message: 'Welcome, ${response.user.name}!',
         type: AlertType.success,
       );
 
@@ -182,41 +276,97 @@ class AuthViewModel extends ChangeNotifier {
     }
   }
 
-  // Merge onboarding location data into the user model
+  // Merge location data: prefer API user_detail locations, fallback to onboarding cache.
+  // If a location ID is null (e.g., subadmin has no mandal), fetch the first available from the list.
   Future<void> _mergeOnboardingLocationData() async {
     if (_user == null) return;
 
     try {
-      // Load onboarding location data
-      final selectedState = await _onboardingStorage.getSelectedState();
-      final selectedDistrict = await _onboardingStorage.getSelectedDistrict();
-      final selectedMandal = await _onboardingStorage.getSelectedMandal();
+      final hasApiLocations = _user!.stateId != null;
 
-      // Update user model with onboarding location data if available
-      _user = _user!.copyWith(
-        stateId: selectedState?.id,
-        stateName: selectedState?.name,
-        districtId: selectedDistrict?.id,
-        districtName: selectedDistrict?.name,
-        mandalId: selectedMandal?.id,
-        mandalName: selectedMandal?.name,
-      );
+      if (hasApiLocations) {
+        // Fetch location names in parallel for speed
+        final stateRepo = StateRepositoryImpl();
+        final districtRepo = DistrictRepositoryImpl();
+        final mandalRepo = MandalRepositoryImpl();
 
-      debugPrint(
-        ' Merged onboarding location: ${selectedState?.name}, ${selectedDistrict?.name}, ${selectedMandal?.name}',
-      );
+        final results = await Future.wait([
+          stateRepo.getStates(),
+          if (_user!.stateId != null)
+            districtRepo.getDistrictsByState(_user!.stateId!)
+          else
+            Future.value(<District>[]),
+          if (_user!.districtId != null)
+            mandalRepo.getMandalsByDistrict(_user!.districtId!)
+          else
+            Future.value(<Mandal>[]),
+        ]);
+
+        final states = results[0] as List<location_models.State>;
+        final districts = results[1] as List<District>;
+        final mandals = results[2] as List<Mandal>;
+
+        final state = states.where((s) => s.id == _user!.stateId).firstOrNull;
+        var district = _user!.districtId != null
+            ? districts.where((d) => d.id == _user!.districtId).firstOrNull
+            : null;
+        district ??= districts.isNotEmpty ? districts.first : null;
+
+        var mandal = _user!.mandalId != null
+            ? mandals.where((m) => m.id == _user!.mandalId).firstOrNull
+            : null;
+        mandal ??= mandals.isNotEmpty ? mandals.first : null;
+
+        // Update user model with real names
+        _user = _user!.copyWith(
+          stateId: state?.id,
+          stateName: state?.name,
+          districtId: district?.id,
+          districtName: district?.name,
+          mandalId: mandal?.id,
+          mandalName: mandal?.name,
+        );
+
+        // Save to onboarding storage so home screen picks it up
+        if (state != null) {
+          await _onboardingStorage.saveSelectedLocation(state, district, mandal);
+        }
+
+        debugPrint(
+          'Using API locations: ${state?.name}, ${district?.name}, ${mandal?.name}',
+        );
+      } else {
+        // No API locations — fallback to onboarding cache
+        final selectedState = await _onboardingStorage.getSelectedState();
+        final selectedDistrict = await _onboardingStorage.getSelectedDistrict();
+        final selectedMandal = await _onboardingStorage.getSelectedMandal();
+
+        _user = _user!.copyWith(
+          stateId: selectedState?.id,
+          stateName: selectedState?.name,
+          districtId: selectedDistrict?.id,
+          districtName: selectedDistrict?.name,
+          mandalId: selectedMandal?.id,
+          mandalName: selectedMandal?.name,
+        );
+
+        debugPrint(
+          'Using cached locations: ${selectedState?.name}, ${selectedDistrict?.name}, ${selectedMandal?.name}',
+        );
+      }
     } catch (e) {
-      debugPrint(' Failed to merge onboarding location data: $e');
+      debugPrint('Failed to merge location data: $e');
     }
   }
 
   Future<void> _applyAuthSuccess(AuthResponse response) async {
     _user = response.user;
+    _token = response.accessToken;
+    _isAuthenticated = true;
     _isLoading = false;
     _error = null;
 
-    // Store token for persistence
-    _authStorage.saveToken(response.accessToken);
+    await _authStorage.saveToken(response.accessToken);
     ApiService.instance.setAuthToken(response.accessToken);
 
     notifyListeners();
@@ -314,13 +464,13 @@ class AuthViewModel extends ChangeNotifier {
       return true;
     }
 
-    // Sub-admin can create editors and reporters (roles 3 and 4)
-    if (currentRole == 'subAdmin') {
-      return targetRole == 3 || targetRole == 4; // editor and reporter
+    // Sub-admin can create Dist-reporters and reporters (roles 3 and 4)
+    if (currentRole == 'subadmin') {
+      return targetRole == 3 || targetRole == 4; // Dist-reporter and reporter
     }
 
-    // Editor can create reporters (role 4)
-    if (currentRole == 'editor') {
+    // Dist-reporter can create reporters (role 4)
+    if (currentRole == 'dist-reporter') {
       return targetRole == 4; // reporter
     }
 
@@ -331,7 +481,7 @@ class AuthViewModel extends ChangeNotifier {
   bool _canAssignLocation(int? stateId, int? districtId, int? mandalId) {
     if (_user == null) return false;
 
-    final currentRole = _user!.primaryRole.name;
+    final currentRole = _user!.primaryRole.value;
 
     // Admin can assign anywhere
     if (currentRole == 'admin') {
@@ -339,12 +489,12 @@ class AuthViewModel extends ChangeNotifier {
     }
 
     // Sub-admin can assign within their state
-    if (currentRole == 'subAdmin') {
+    if (currentRole == 'subadmin') {
       return stateId == _user!.stateId;
     }
 
-    // Editor can assign within their scope (state/district/mandal)
-    if (currentRole == 'editor') {
+    // Dist-reporter can assign within their scope (state/district/mandal)
+    if (currentRole == 'dist-reporter') {
       if (_user!.mandalId != null) {
         return mandalId == _user!.mandalId;
       } else if (_user!.districtId != null) {
@@ -365,10 +515,10 @@ class AuthViewModel extends ChangeNotifier {
 
     switch (currentRole) {
       case 'admin':
-        return [2, 3, 4]; // subAdmin, editor, reporter
-      case 'subAdmin':
-        return [3, 4]; // editor, reporter
-      case 'editor':
+        return [2, 3, 4]; // subAdmin, Dist-reporter, reporter
+      case 'subadmin':
+        return [3, 4]; // Dist-reporter, reporter
+      case 'dist-reporter':
         return [4]; // reporter
       default:
         return [];

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/routing/app_router.dart';
 import '../../core/services/onboarding_storage.dart';
 import '../../core/utils/onboarding_manager.dart';
+import '../../enums/onboarding_enum.dart';
 import '../../data/models/mandal.dart';
 import '../../navigators/onboarding_navigator.dart';
 import '../../providers/app_providers.dart';
@@ -25,8 +26,8 @@ class MandalSelectionScreen extends ConsumerWidget {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: AutoScaledText(
-          'Select Mandal',
+        title: Text(
+          'Select Mandal (Your Area)',
           style: TextStyle(
             fontSize: appFontSizeTitle,
             fontWeight: FontWeight.w600,
@@ -62,8 +63,8 @@ class MandalSelectionScreen extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  AutoScaledText(
-                    'Choose your Mandal',
+                  Text(
+                    'Choose your Mandal(Your Area)',
                     style: TextStyle(
                       fontSize: appFontSizeHeader,
                       fontWeight: FontWeight.w600,
@@ -74,7 +75,7 @@ class MandalSelectionScreen extends ConsumerWidget {
                   const SizedBox(height: 8),
                   if (locationViewModel.selectedState != null &&
                       locationViewModel.selectedDistrict != null) ...[
-                    AutoScaledText(
+                    Text(
                       'in ${locationViewModel.selectedDistrict!.name}, ${locationViewModel.selectedState!.name}',
                       style: TextStyle(
                         fontSize: appFontSizeBody,
@@ -131,7 +132,7 @@ class MandalSelectionScreen extends ConsumerWidget {
 
     if (locationViewModel.mandals.isEmpty) {
       return Center(
-        child: AutoScaledText(
+        child: Text(
           'No mandals available',
           style: TextStyle(fontSize: appFontSizeSubHeader, color: Colors.grey),
         ),
@@ -178,7 +179,7 @@ class MandalSelectionScreen extends ConsumerWidget {
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        title: AutoScaledText(
+        title: Text(
           mandal.name,
           style: TextStyle(
             fontSize: appFontSizeSubHeader,
@@ -234,7 +235,7 @@ class MandalSelectionScreen extends ConsumerWidget {
           children: [
             Icon(Icons.error_outline, size: 64, color: Theme.of(context).appErrorLight),
             const SizedBox(height: 16),
-            AutoScaledText(
+            Text(
               title,
               style: TextStyle(
                 fontSize: appFontSizeHeader,
@@ -244,7 +245,7 @@ class MandalSelectionScreen extends ConsumerWidget {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
-            AutoScaledText(
+            Text(
               error,
               style: TextStyle(
                 fontSize: appFontSizeBody,
@@ -266,7 +267,7 @@ class MandalSelectionScreen extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
-              child: const AutoScaledText('Retry'),
+              child: const Text('Retry'),
             ),
           ],
         ),
@@ -302,6 +303,13 @@ class MandalSelectionScreen extends ConsumerWidget {
 
       final onboardingManager = OnboardingManager(storage);
       final step = await onboardingManager.getCurrentStep();
+
+      // If onboarding is already complete, user is just changing location — pop back
+      if (step == OnboardingStep.completed && context.mounted) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+        return;
+      }
+
       OnboardingNavigator.navigate(context, step, replace: false);
     } catch (e) {
       debugPrint('Location onboarding error: $e');

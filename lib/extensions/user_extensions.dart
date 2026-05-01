@@ -15,13 +15,15 @@ extension UserRoleExtension on User {
     }
 
     // Check for sub-admin role
-    if (hasRoleSlug('sub_admin') || hasRoleSlug('sub-admin')) {
+    if (hasRoleSlug('sub_admin') ||
+        hasRoleSlug('sub-admin') ||
+        hasRoleSlug('subadmin')) {
       return UserRole.subAdmin;
     }
 
-    // Check for editor role
-    if (hasRoleSlug('editor')) {
-      return UserRole.editor;
+    // Check for dist-reporter role
+    if (hasRoleSlug('dist-reporter')) {
+      return UserRole.distReporter;
     }
 
     // Check for reporter role
@@ -33,10 +35,12 @@ extension UserRoleExtension on User {
     return UserRole.reader;
   }
 
-  /// Check if user has a specific role slug
+  /// Check if user has a specific role slug or name
   bool hasRoleSlug(String slug) {
     return roles?.any(
-          (role) => role.slug.toLowerCase() == slug.toLowerCase(),
+          (role) =>
+              role.slug?.toLowerCase() == slug.toLowerCase() ||
+              role.name.toLowerCase() == slug.toLowerCase(),
         ) ??
         false;
   }
@@ -61,7 +65,9 @@ extension UserRoleExtension on User {
   /// Can upload news content - uses API permissions
   bool get canUploadContent =>
       hasPermission(Permissions.createNews) ||
-      hasPermission(Permissions.uploadMedia);
+      hasPermission(Permissions.uploadMedia) ||
+      hasPermission(Permissions.editNews) ||
+      hasPermission(Permissions.publishNews);
 
   /// Can moderate/approve content - uses API permissions
   bool get canModerateContent =>
@@ -86,8 +92,8 @@ extension UserRoleExtension on User {
   bool get canAccessSubAdmin =>
       hasPermission(Permissions.manageTopics) || canAccessAdmin;
 
-  /// Can access editor features - uses API permissions
-  bool get canAccessEditor =>
+  /// Can access dist-reporter features - uses API permissions
+  bool get canAccessDistReporter =>
       hasPermission(Permissions.editNews) || canAccessSubAdmin;
 
   /// Can post ads - uses API permissions (fallback to create news for now)
@@ -133,8 +139,8 @@ extension UserRoleExtension on User {
         return '/admin-dashboard';
       case UserRole.subAdmin:
         return '/sub-admin-dashboard';
-      case UserRole.editor:
-        return '/editor-dashboard';
+      case UserRole.distReporter:
+        return '/dist-reporter-dashboard';
       case UserRole.reporter:
         return '/reporter-dashboard';
       case UserRole.reader:

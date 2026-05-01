@@ -18,7 +18,7 @@ class MandalRepositoryImpl implements MandalRepository {
   @override
   Future<List<Mandal>> getMandalsByDistrict(int districtId) async {
     try {
-      final response = await _apiService.get('${AppConstants.mandals}/$districtId', useAuth: false);
+      final response = await _apiService.get('${AppConstants.mandals}/$districtId', useAuth: false, showErrorAlert: false);
 
       if (response.containsKey('error')) {
         throw Exception(response['error']);
@@ -69,7 +69,7 @@ class MandalRepositoryImpl implements MandalRepository {
       final response = await _apiService.post(
         AppConstants.mandals,
         body: requestBody,
-        useAuth: false,
+        useAuth: true,
       );
 
       if (response.containsKey('error')) {
@@ -98,7 +98,7 @@ class MandalRepositoryImpl implements MandalRepository {
       final response = await _apiService.put(
         '${AppConstants.mandals}/$id',
         requestBody,
-        useAuth: false,
+        useAuth: true,
       );
 
       if (response.containsKey('error')) {

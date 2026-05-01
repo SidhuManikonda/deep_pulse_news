@@ -21,7 +21,7 @@ class DistrictSelectionScreen extends ConsumerWidget {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: AutoScaledText(
+        title: Text(
           'Select District',
           style: TextStyle(
             fontSize: appFontSizeTitle,
@@ -62,7 +62,7 @@ class DistrictSelectionScreen extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  AutoScaledText(
+                  Text(
                     'Choose your District',
                     style: TextStyle(
                       fontSize: appFontSizeHeader,
@@ -73,7 +73,7 @@ class DistrictSelectionScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 8),
                   if (locationViewModel.selectedState != null) ...[
-                    AutoScaledText(
+                    Text(
                       'in ${locationViewModel.selectedState!.name}',
                       style: TextStyle(
                         fontSize: appFontSizeBody,
@@ -116,7 +116,7 @@ class DistrictSelectionScreen extends ConsumerWidget {
 
     if (locationViewModel.districts.isEmpty) {
       return Center(
-        child: AutoScaledText(
+        child: Text(
           'No districts available',
           style: TextStyle(fontSize: appFontSizeSubHeader, color: Colors.grey),
         ),
@@ -146,7 +146,7 @@ class DistrictSelectionScreen extends ConsumerWidget {
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
-        title: AutoScaledText(
+        title: Text(
           district.name,
           style: TextStyle(
             fontSize: appFontSizeSubHeader,
@@ -198,7 +198,7 @@ class DistrictSelectionScreen extends ConsumerWidget {
               color: Theme.of(context).appErrorLight,
             ),
             const SizedBox(height: 16),
-            AutoScaledText(
+            Text(
               title,
               style: TextStyle(
                 fontSize: appFontSizeHeader,
@@ -208,7 +208,7 @@ class DistrictSelectionScreen extends ConsumerWidget {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
-            AutoScaledText(
+            Text(
               error,
               style: TextStyle(
                 fontSize: appFontSizeBody,
@@ -230,7 +230,7 @@ class DistrictSelectionScreen extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
-              child: const AutoScaledText('Retry'),
+              child: const Text('Retry'),
             ),
           ],
         ),

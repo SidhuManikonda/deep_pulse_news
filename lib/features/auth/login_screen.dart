@@ -9,6 +9,8 @@ import '../../core/utils/onboarding_manager.dart';
 import '../../providers/app_providers.dart';
 import '../../shared/widgets/custom_button.dart';
 import '../../shared/widgets/custom_text_field.dart';
+import '../../core/constants/app_font_sizes.dart';
+import '../../shared/widgets/app_logo.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -19,14 +21,13 @@ class LoginScreen extends ConsumerStatefulWidget {
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController(text: "admin@example.com");
-  final _passwordController = TextEditingController(text: "admin123");
+  final _mobileController = TextEditingController(text: '+1234567891');
+  final _passwordController = TextEditingController(text: 'admin123');
   bool _obscurePassword = true;
-  //rama@gmail.com //admin@example.com
-  //12345678 //admin123
+
   @override
   void dispose() {
-    _emailController.dispose();
+    _mobileController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -37,7 +38,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final authViewModel = ref.read(authViewModelProvider);
 
     final success = await authViewModel.login(
-      email: _emailController.text.trim(),
+      mobile: _mobileController.text.trim(),
       password: _passwordController.text,
     );
 
@@ -46,8 +47,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     try {
       final onboardingManager = OnboardingManager(OnboardingStorage());
       final step = await onboardingManager.getCurrentStep();
-      OnboardingNavigator.navigate(context, step,replace: false);
-
+      OnboardingNavigator.navigate(context, step, replace: false);
     } catch (e) {
       debugPrint('Onboarding navigation error: $e');
       Navigator.pushNamedAndRemoveUntil(
@@ -78,45 +78,29 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 20),
-                Center(
-                  child: Container(
-                    width: 80,
-                    height: 80,
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).appPrimary,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Icon(
-                      Icons.newspaper,
-                      size: 40,
-                      color: Theme.of(context).appTextWhite,
-                    ),
-                  ),
-                ),
+                Center(child: AppLogo(size: 150)),
                 const SizedBox(height: 32),
                 Text(
                   'Login',
                   style: TextStyle(
-                    fontSize: 28,
+                    fontSize: scaledFontSize(28),
                     fontWeight: FontWeight.bold,
                     color: Theme.of(context).textTheme.headlineLarge?.color,
                   ),
                 ),
                 const SizedBox(height: 32),
                 CustomTextField(
-                  controller: _emailController,
-                  hintText: 'Enter your email',
-                  labelText: 'Email',
-                  keyboardType: TextInputType.emailAddress,
-                  prefixIcon: const Icon(Icons.email_outlined),
+                  controller: _mobileController,
+                  hintText: 'Enter your mobile number',
+                  labelText: 'Mobile Number',
+                  keyboardType: TextInputType.phone,
+                  prefixIcon: const Icon(Icons.phone_outlined),
                   validator: (value) {
                     if (value?.isEmpty ?? true) {
-                      return 'Please enter your email';
+                      return 'Please enter your mobile number';
                     }
-                    if (!RegExp(
-                      r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
-                    ).hasMatch(value!)) {
-                      return 'Please enter a valid email';
+                    if (value!.length < 10) {
+                      return 'Please enter a valid mobile number';
                     }
                     return null;
                   },
@@ -168,6 +152,36 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       style: TextStyle(
                         color: Theme.of(context).appPrimary,
                         fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // Experimental Gmail SSO entry
+                Center(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pushNamed(context, AppRouter.gmailSso);
+                    },
+                    icon: const Icon(Icons.account_circle_outlined, size: 18),
+                    label: Text(
+                      'Try Gmail SSO (Experimental)',
+                      style: TextStyle(
+                        fontSize: scaledFontSize(12),
+                        color: Theme.of(context).appPrimary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(
+                        color: Theme.of(context).appPrimary.withValues(alpha: 0.4),
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
                       ),
                     ),
                   ),

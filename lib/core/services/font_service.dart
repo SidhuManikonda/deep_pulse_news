@@ -1,9 +1,9 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
 enum FontSize {
-  small('Small', 0.6),
-  medium('Medium', 0.8),
-  large('Large', 1.0);
+  small('Small', 0.85),
+  medium('Medium', 1.0),
+  large('Large', 1.15);
 
   const FontSize(this.displayName, this.scale);
   

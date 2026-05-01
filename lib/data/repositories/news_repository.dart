@@ -1,16 +1,30 @@
+import 'package:flutter/foundation.dart';
+
 import '../models/news.dart';
+import '../models/paginated_response.dart';
 import '../models/create_news_request.dart';
 import '../../core/services/api_service.dart';
 import '../../core/constants/app_constants.dart';
 
 abstract class NewsRepository {
-  Future<List<News>> getNews({String? status, String? userId});
+  Future<PaginatedResponse<News>> getNews({
+    String? status,
+    String? userId,
+    String? cursor,
+  });
   Future<News?> getNewsById(int id);
   Future<News?> createNews(CreateNewsRequest request);
   Future<News?> updateNews(int id, CreateNewsRequest request);
   Future<bool> deleteNews(int id);
   Future<bool> updateNewsStatus(int newsId, String status);
   Future<Map<String, dynamic>> shareNews(int newsId, String platform);
+  Future<bool> saveNewsView(int newsId, String ipAddress);
+  Future<bool> sendReport({
+    required String type,
+    required int itemId,
+    required String reason,
+    String? description,
+  });
 }
 
 class NewsRepositoryImpl implements NewsRepository {
@@ -19,7 +33,11 @@ class NewsRepositoryImpl implements NewsRepository {
   NewsRepositoryImpl({ApiService? apiService})
     : _apiService = apiService ?? ApiService.instance;
   @override
-  Future<List<News>> getNews({String? status, String? userId}) async {
+  Future<PaginatedResponse<News>> getNews({
+    String? status,
+    String? userId,
+    String? cursor,
+  }) async {
     try {
       final queryParams = <String, String>{};
       if (status != null) {
@@ -28,6 +46,9 @@ class NewsRepositoryImpl implements NewsRepository {
       if (userId != null) {
         queryParams['user_id'] = userId;
       }
+      if (cursor != null) {
+        queryParams['cursor'] = cursor;
+      }
 
       final response = await _apiService.get(
         AppConstants.news,
@@ -35,12 +56,20 @@ class NewsRepositoryImpl implements NewsRepository {
         useAuth: userId != null,
       );
 
-      List<Map<String, dynamic>> newsData = [];
-      if (response != null) {
-        newsData = List<Map<String, dynamic>>.from(response);
+      if (response is Map<String, dynamic> && response.containsKey('data')) {
+        return PaginatedResponse.fromJson(response, News.fromJson);
       }
 
-      return newsData.map((json) => News.fromJson(json)).toList();
+      // Fallback for non-paginated response
+      List<Map<String, dynamic>> newsData = [];
+      if (response is List) {
+        newsData = List<Map<String, dynamic>>.from(response);
+      }
+      return PaginatedResponse(
+        data: newsData.map((json) => News.fromJson(json)).toList(),
+        perPage: newsData.length,
+        hasMore: false,
+      );
     } catch (e) {
       throw Exception('Failed to fetch news: $e');
     }
@@ -99,10 +128,7 @@ class NewsRepositoryImpl implements NewsRepository {
       // This depends on your API implementation
       final response = await _apiService.postMultipart(
         '${AppConstants.news}/$id',
-        fields: {
-          ...request.toFormData(),
-          '_method': 'PUT', // Laravel method spoofing for multipart PUT
-        },
+        fields: request.toFormData(),
         files: request.files,
         fileFieldName: 'files[]',
         useAuth: true, // Require authentication for updating news
@@ -178,6 +204,60 @@ class NewsRepositoryImpl implements NewsRepository {
       return response;
     } catch (e) {
       throw Exception('Failed to share news: $e');
+    }
+  }
+
+  @override
+  Future<bool> sendReport({
+    required String type,
+    required int itemId,
+    required String reason,
+    String? description,
+  }) async {
+    try {
+      final body = {
+        'type': type,
+        'item_id': itemId.toString(),
+        'reason': reason,
+        if (description != null) 'description': description,
+      };
+      final response = await _apiService.post(
+        AppConstants.report,
+        body: body,
+        useAuth: true,
+      );
+
+      if (response.containsKey('error')) {
+        return false;
+      }
+
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> saveNewsView(int newsId, String ipAddress) async {
+    try {
+      final response = await _apiService.post(
+        AppConstants.saveNewsView,
+        body: {'news_id': newsId.toString(), 'ip_address': ipAddress},
+        useAuth: true,
+        showErrorAlert: false,
+      );
+
+      debugPrint('VIEW API RESPONSE: $response');
+
+      if (response.containsKey('error')) {
+        debugPrint('VIEW API ERROR: ${response['error']}');
+        return false;
+      }
+
+      return true;
+    } catch (e) {
+      debugPrint('VIEW API EXCEPTION: $e');
+      return false;
     }
   }
 }

@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../constants/app_colors.dart';
 
 class AppTheme {
-  static ThemeData lightTheme([double fontScale = 1.0]) {
+  static ThemeData lightTheme() {
     return ThemeData(
       useMaterial3: true,
       colorScheme: ColorScheme.fromSeed(
@@ -18,7 +18,7 @@ class AppTheme {
         elevation: 0,
         centerTitle: false,
         titleTextStyle: GoogleFonts.roboto(
-          fontSize: 20 * fontScale,
+          fontSize: 20,
           fontWeight: FontWeight.w600,
           color: appTextPrimaryLightColor,
         ),
@@ -32,18 +32,18 @@ class AppTheme {
             borderRadius: BorderRadius.circular(8),
           ),
           textStyle: GoogleFonts.roboto(
-            fontSize: 16 * fontScale,
+            fontSize: 16,
             fontWeight: FontWeight.w500,
           ),
         ),
       ),
       textTheme: GoogleFonts.robotoTextTheme().copyWith(
-        headlineLarge: GoogleFonts.roboto(fontSize: 24 * fontScale, fontWeight: FontWeight.bold, color: appTextPrimaryLightColor),
-        headlineMedium: GoogleFonts.roboto(fontSize: 20 * fontScale, fontWeight: FontWeight.w600, color: appTextPrimaryLightColor),
-        headlineSmall: GoogleFonts.roboto(fontSize: 18 * fontScale, fontWeight: FontWeight.w500, color: appTextPrimaryLightColor),
-        bodyLarge: GoogleFonts.roboto(fontSize: 16 * fontScale, fontWeight: FontWeight.normal, color: appTextPrimaryLightColor),
-        bodyMedium: GoogleFonts.roboto(fontSize: 14 * fontScale, fontWeight: FontWeight.normal, color: appTextSecondaryLightColor),
-        bodySmall: GoogleFonts.roboto(fontSize: 12 * fontScale, fontWeight: FontWeight.normal, color: appTextLightLightColor),
+        headlineLarge: GoogleFonts.roboto(fontSize: 24, fontWeight: FontWeight.bold, color: appTextPrimaryLightColor),
+        headlineMedium: GoogleFonts.roboto(fontSize: 20, fontWeight: FontWeight.w600, color: appTextPrimaryLightColor),
+        headlineSmall: GoogleFonts.roboto(fontSize: 18, fontWeight: FontWeight.w500, color: appTextPrimaryLightColor),
+        bodyLarge: GoogleFonts.roboto(fontSize: 16, fontWeight: FontWeight.normal, color: appTextPrimaryLightColor),
+        bodyMedium: GoogleFonts.roboto(fontSize: 14, fontWeight: FontWeight.normal, color: appTextSecondaryLightColor),
+        bodySmall: GoogleFonts.roboto(fontSize: 12, fontWeight: FontWeight.normal, color: appTextLightLightColor),
       ),
       cardTheme: CardThemeData(
         color: appSurfaceLightColor,
@@ -57,8 +57,8 @@ class AppTheme {
         selectedItemColor: appPrimaryLightColor,
         unselectedItemColor: appTextLightLightColor,
         type: BottomNavigationBarType.fixed,
-        selectedLabelStyle: GoogleFonts.roboto(fontSize: 12 * fontScale),
-        unselectedLabelStyle: GoogleFonts.roboto(fontSize: 12 * fontScale),
+        selectedLabelStyle: GoogleFonts.roboto(fontSize: 12),
+        unselectedLabelStyle: GoogleFonts.roboto(fontSize: 12),
       ),
       inputDecorationTheme: InputDecorationTheme(
         fillColor: appSurfaceLightColor,
@@ -88,7 +88,7 @@ class AppTheme {
     );
   }
 
-  static ThemeData darkTheme([double fontScale = 1.0]) {
+  static ThemeData darkTheme() {
     return ThemeData(
       useMaterial3: true,
       colorScheme: ColorScheme.fromSeed(
@@ -103,7 +103,7 @@ class AppTheme {
         elevation: 0,
         centerTitle: false,
         titleTextStyle: GoogleFonts.roboto(
-          fontSize: 20 * fontScale,
+          fontSize: 20,
           fontWeight: FontWeight.w600,
           color: appTextWhiteColor,
         ),
@@ -117,39 +117,39 @@ class AppTheme {
             borderRadius: BorderRadius.circular(8),
           ),
           textStyle: GoogleFonts.roboto(
-            fontSize: 16 * fontScale,
+            fontSize: 16,
             fontWeight: FontWeight.w500,
           ),
         ),
       ),
       textTheme: GoogleFonts.robotoTextTheme(ThemeData.dark().textTheme).copyWith(
         headlineLarge: GoogleFonts.roboto(
-          fontSize: 24 * fontScale,
+          fontSize: 24,
           fontWeight: FontWeight.bold,
           color: appTextWhiteColor,
         ),
         headlineMedium: GoogleFonts.roboto(
-          fontSize: 20 * fontScale,
+          fontSize: 20,
           fontWeight: FontWeight.w600,
           color: appTextWhiteColor,
         ),
         headlineSmall: GoogleFonts.roboto(
-          fontSize: 18 * fontScale,
+          fontSize: 18,
           fontWeight: FontWeight.w500,
           color: appTextWhiteColor,
         ),
         bodyLarge: GoogleFonts.roboto(
-          fontSize: 16 * fontScale,
+          fontSize: 16,
           fontWeight: FontWeight.normal,
           color: appTextWhiteColor,
         ),
         bodyMedium: GoogleFonts.roboto(
-          fontSize: 14 * fontScale,
+          fontSize: 14,
           fontWeight: FontWeight.normal,
           color: appTextLightDarkColor,
         ),
         bodySmall: GoogleFonts.roboto(
-          fontSize: 12 * fontScale,
+          fontSize: 12,
           fontWeight: FontWeight.normal,
           color: appTextLightDarkColor,
         ),
@@ -166,8 +166,8 @@ class AppTheme {
         selectedItemColor: appPrimaryLightColor,
         unselectedItemColor: appTextLightDarkColor,
         type: BottomNavigationBarType.fixed,
-        selectedLabelStyle: GoogleFonts.roboto(fontSize: 12 * fontScale),
-        unselectedLabelStyle: GoogleFonts.roboto(fontSize: 12 * fontScale),
+        selectedLabelStyle: GoogleFonts.roboto(fontSize: 12),
+        unselectedLabelStyle: GoogleFonts.roboto(fontSize: 12),
       ),
       inputDecorationTheme: InputDecorationTheme(
         fillColor: appSurfaceDarkColor,

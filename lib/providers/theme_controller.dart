@@ -3,7 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class ThemeController extends ChangeNotifier {
   static const String _themeKey = 'is_dark_mode';
-  bool _isDarkMode = true;
+  bool _isDarkMode = false;
   bool _isInitialized = false;
 
   bool get isDarkMode => _isDarkMode;
@@ -14,7 +14,7 @@ class ThemeController extends ChangeNotifier {
   Future<void> init() async {
     if (_isInitialized) return;
     final prefs = await SharedPreferences.getInstance();
-    _isDarkMode = prefs.getBool(_themeKey) ?? true;
+    _isDarkMode = prefs.getBool(_themeKey) ?? false;
     _isInitialized = true;
     notifyListeners();
   }

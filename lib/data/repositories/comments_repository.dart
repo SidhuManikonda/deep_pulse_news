@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../models/comment.dart';
 import '../models/user_comment.dart';
 import '../../core/services/api_service.dart';
@@ -18,6 +20,8 @@ abstract class CommentsRepository {
     required bool isLike,
   });
   Future<List<UserCommentEntry>> getUserComments({required int userId});
+  Future<bool> deleteComment({required int commentId});
+  Future<bool> blockComment({required int commentId});
 }
 
 class CommentsRepositoryImpl implements CommentsRepository {
@@ -46,11 +50,7 @@ class CommentsRepositoryImpl implements CommentsRepository {
 
       if (response.containsKey('comment')) {
         final commentJson = response['comment'] as Map<String, dynamic>;
-        print('POST Comment JSON: $commentJson'); // Debug log
         final comment = Comment.fromJson(commentJson);
-        print(
-          'Parsed Comment: id=${comment.id}, comment=${comment.comment}',
-        ); // Debug log
         return comment;
       } else if (response.containsKey('data')) {
         return Comment.fromJson(response['data']);
@@ -104,7 +104,7 @@ class CommentsRepositoryImpl implements CommentsRepository {
     try {
       final response = await _apiService.get(
         '${AppConstants.comments}/$newsId',
-        useAuth: false,
+        useAuth: true,
         showErrorAlert: false,
       );
 
@@ -120,7 +120,17 @@ class CommentsRepositoryImpl implements CommentsRepository {
           return [];
         }
 
-        if (response.containsKey('data')) {
+        // Handle double-nested paginated response: { data: { data: [...] } }
+        if (response.containsKey('data') && response['data'] is Map<String, dynamic>) {
+          final paginatedData = response['data'] as Map<String, dynamic>;
+          if (paginatedData.containsKey('data') && paginatedData['data'] is List) {
+            final comments = paginatedData['data'] as List<dynamic>;
+            return comments.map((json) => Comment.fromJson(json)).toList();
+          }
+        }
+
+        // Handle flat paginated response: { data: [...] }
+        if (response.containsKey('data') && response['data'] is List) {
           final comments = response['data'] as List<dynamic>;
           return comments.map((json) => Comment.fromJson(json)).toList();
         }
@@ -147,6 +157,7 @@ class CommentsRepositoryImpl implements CommentsRepository {
         AppConstants.commentUsers,
         queryParameters: {'user_id': userId.toString()},
         useAuth: true,
+        showErrorAlert: false,
       );
 
       final data = response['data'] as List<dynamic>? ?? [];
@@ -171,17 +182,57 @@ class CommentsRepositoryImpl implements CommentsRepository {
         'is_like': isLike ? 1 : 0,
       };
 
+      debugPrint('LIKE/DISLIKE REQUEST: $body');
       final response = await _apiService.post(
         AppConstants.likeDislike,
         body: body,
+        useAuth: true,
+      );
+      debugPrint('LIKE/DISLIKE RESPONSE: $response');
+
+      if (response.containsKey('error')) {
+        throw Exception(response['error']);
+      }
+    } catch (e) {
+      debugPrint('LIKE/DISLIKE ERROR: $e');
+      throw Exception('Failed to like/dislike: $e');
+    }
+  }
+
+  @override
+  Future<bool> deleteComment({required int commentId}) async {
+    try {
+      final response = await _apiService.delete(
+        '${AppConstants.comments}/$commentId',
         useAuth: true,
       );
 
       if (response.containsKey('error')) {
         throw Exception(response['error']);
       }
+
+      return true;
     } catch (e) {
-      throw Exception('Failed to like/dislike: $e');
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> blockComment({required int commentId}) async {
+    try {
+      final response = await _apiService.post(
+        '${AppConstants.blockComment}/$commentId/block',
+        body: {},
+        useAuth: true,
+      );
+
+      if (response.containsKey('error')) {
+        return false;
+      }
+
+      return true;
+    } catch (e) {
+      return false;
     }
   }
 }
