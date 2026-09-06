@@ -1,94 +1,142 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../data/models/district.dart';
-import '../../providers/app_providers.dart';
-import '../../shared/widgets/shimmer_widget.dart';
-import '../../shared/widgets/auto_scaled_text.dart';
+
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_font_sizes.dart';
+import '../../core/constants/app_spacing.dart';
+import '../../data/models/district.dart';
 import '../../features/onboarding/location_view_model.dart';
+import '../../providers/app_providers.dart';
 import 'mandal_selection_screen.dart';
+import 'onboarding_widgets.dart';
 
-class DistrictSelectionScreen extends ConsumerWidget {
+class DistrictSelectionScreen extends ConsumerStatefulWidget {
   const DistrictSelectionScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final locationViewModel = ref.watch(locationViewModelProvider);
+  ConsumerState<DistrictSelectionScreen> createState() =>
+      _DistrictSelectionScreenState();
+}
+
+class _DistrictSelectionScreenState
+    extends ConsumerState<DistrictSelectionScreen> {
+  String _query = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final vm = ref.watch(locationViewModelProvider);
+    final theme = Theme.of(context);
+
+    final filtered = _query.isEmpty
+        ? vm.districts
+        : vm.districts
+            .where((d) => d.name.toLowerCase().contains(_query.toLowerCase()))
+            .toList();
 
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: Text(
-          'Select District',
-          style: TextStyle(
-            fontSize: appFontSizeTitle,
-            fontWeight: FontWeight.w600,
-            color: Theme.of(context).textTheme.headlineLarge?.color,
-          ),
-        ),
-        centerTitle: true,
-        leading: IconButton(
-          icon: Icon(
-            Icons.arrow_back,
-            color: Theme.of(context).textTheme.bodyLarge?.color,
-          ),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
+      backgroundColor: Colors.white,
       body: SafeArea(
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Header section
+            // ── Header ───────────────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.sm, AppSpacing.sm, AppSpacing.lg, 0,
+              ),
+              child: Row(
                 children: [
-                  Container(
-                    width: 60,
-                    height: 60,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF2196F3),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Center(
-                      child: Icon(
-                        Icons.location_city,
-                        color: Colors.white,
-                        size: 32,
-                      ),
-                    ),
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back_rounded),
+                    color: const Color(0xFF1C1C1E),
+                    onPressed: () => Navigator.pop(context),
                   ),
-                  const SizedBox(height: 16),
+                  const Spacer(),
                   Text(
-                    'Choose your District',
+                    'Step 2 of 3',
                     style: TextStyle(
-                      fontSize: appFontSizeHeader,
-                      fontWeight: FontWeight.w600,
-                      color: Theme.of(context).textTheme.headlineMedium?.color,
+                      fontSize: scaledFontSize(13),
+                      color: theme.appTextSecondary,
+                      fontWeight: FontWeight.w500,
                     ),
-                    textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 8),
-                  if (locationViewModel.selectedState != null) ...[
-                    Text(
-                      'in ${locationViewModel.selectedState!.name}',
-                      style: TextStyle(
-                        fontSize: appFontSizeBody,
-                        color: Theme.of(context).textTheme.bodyMedium?.color,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
                 ],
               ),
             ),
 
-            // Districts list
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  LocationStepIndicator(currentStep: 2),
+                  const SizedBox(height: AppSpacing.lg),
+                  Text(
+                    'Choose your District',
+                    style: TextStyle(
+                      fontSize: scaledFontSize(22),
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF1C1C1E),
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                  if (vm.selectedState != null) ...[
+                    const SizedBox(height: AppSpacing.xs),
+                    Row(
+                      children: [
+                        Icon(Icons.location_on_rounded,
+                            size: 14, color: theme.appPrimary),
+                        const SizedBox(width: 4),
+                        Text(
+                          vm.selectedState!.name,
+                          style: TextStyle(
+                            fontSize: scaledFontSize(13),
+                            color: theme.appPrimary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: AppSpacing.lg),
+                  LocationSearchBar(
+                    hint: 'Search districts...',
+                    onChanged: (v) => setState(() => _query = v),
+                  ),
+                ],
+              ),
+            ),
+
+            // ── List ─────────────────────────────────────────────────
             Expanded(
-              child: _buildDistrictsList(context, locationViewModel, ref),
+              child: vm.isLoadingDistricts
+                  ? buildLoadingList()
+                  : vm.districtsError != null
+                  ? buildErrorWidget(
+                      context, vm.districtsError!, vm.retryLoadDistricts)
+                  : filtered.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No districts found',
+                        style: TextStyle(
+                          fontSize: scaledFontSize(14),
+                          color: theme.appTextSecondary,
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.lg,
+                        vertical: AppSpacing.sm,
+                      ),
+                      itemCount: filtered.length,
+                      itemBuilder: (_, i) => LocationListItem(
+                        name: filtered[i].name,
+                        onTap: () => _onTap(filtered[i]),
+                      ),
+                    ),
             ),
           ],
         ),
@@ -96,160 +144,11 @@ class DistrictSelectionScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildDistrictsList(
-    BuildContext context,
-    LocationViewModel locationViewModel,
-    WidgetRef ref,
-  ) {
-    if (locationViewModel.isLoadingDistricts) {
-      return _buildLoadingList();
-    }
-
-    if (locationViewModel.districtsError != null) {
-      return _buildErrorWidget(
-        context,
-        'Failed to load districts',
-        locationViewModel.districtsError!,
-        () => locationViewModel.retryLoadDistricts(),
-      );
-    }
-
-    if (locationViewModel.districts.isEmpty) {
-      return Center(
-        child: Text(
-          'No districts available',
-          style: TextStyle(fontSize: appFontSizeSubHeader, color: Colors.grey),
-        ),
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      itemCount: locationViewModel.districts.length,
-      itemBuilder: (context, index) {
-        final district = locationViewModel.districts[index];
-        return _buildDistrictItem(context, district, ref);
-      },
-    );
-  }
-
-  Widget _buildDistrictItem(
-    BuildContext context,
-    District district,
-    WidgetRef ref,
-  ) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Theme.of(context).appGrey300, width: 1),
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
-        title: Text(
-          district.name,
-          style: TextStyle(
-            fontSize: appFontSizeSubHeader,
-            fontWeight: FontWeight.w500,
-            color: Theme.of(context).textTheme.bodyLarge?.color,
-          ),
-        ),
-        trailing: Icon(
-          Icons.arrow_forward_ios,
-          size: 16,
-          color: Colors.grey[600],
-        ),
-        onTap: () => _onDistrictSelected(context, district, ref),
-      ),
-    );
-  }
-
-  Widget _buildLoadingList() {
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      itemCount: 10,
-      itemBuilder: (context, index) {
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 10.0),
-          child: ShimmerWidget(
-            width: double.infinity,
-            borderRadius: BorderRadius.circular(4),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildErrorWidget(
-    BuildContext context,
-    String title,
-    String error,
-    VoidCallback onRetry,
-  ) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.error_outline,
-              size: 64,
-              color: Theme.of(context).appErrorLight,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: appFontSizeHeader,
-                fontWeight: FontWeight.w600,
-                color: appErrorColor,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              error,
-              style: TextStyle(
-                fontSize: appFontSizeBody,
-                color: Theme.of(context).appErrorMedium,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: onRetry,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Theme.of(context).appErrorMedium,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 32,
-                  vertical: 12,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              child: const Text('Retry'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _onDistrictSelected(
-    BuildContext context,
-    District district,
-    WidgetRef ref,
-  ) {
-    // Set selected district in view model
+  void _onTap(District district) {
     ref.read(locationViewModelProvider).setSelectedDistrict(district);
-
-    // Navigate to mandal selection screen
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => const MandalSelectionScreen()),
+      MaterialPageRoute(builder: (_) => const MandalSelectionScreen()),
     );
   }
 }

@@ -15,6 +15,7 @@ class OnboardingStorage {
   static const String _selectedLanguageKey = 'selected_language';
   static const String _selectedTopicsKey = 'selected_topics';
   static const String _savedMobileKey = 'saved_mobile';
+  static const String _locationManualUserKey = 'location_manual_user_id';
 
   Future<void> saveMobile(String mobile) async {
     final prefs = await SharedPreferences.getInstance();
@@ -87,6 +88,22 @@ class OnboardingStorage {
     } else {
       await prefs.remove(_selectedMandalKey);
     }
+  }
+
+  /// Records that [userId] picked their location by hand (profile screen), so
+  /// the stored location outranks whatever the account was registered with.
+  /// Keyed by user id so signing in as somebody else falls back to that
+  /// account's own location instead of inheriting the previous user's pick.
+  Future<void> setLocationManuallySetBy(int userId) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_locationManualUserKey, userId);
+  }
+
+  /// Id of the user who last picked a location by hand, or null if the current
+  /// stored location came from onboarding / the account itself.
+  Future<int?> getLocationManualUserId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_locationManualUserKey);
   }
 
   Future<State?> getSelectedState() async {
@@ -162,5 +179,6 @@ class OnboardingStorage {
     await prefs.remove(_selectedMandalKey);
     await prefs.remove(_selectedLanguageKey);
     await prefs.remove(_selectedTopicsKey);
+    await prefs.remove(_locationManualUserKey);
   }
 }

@@ -1,273 +1,173 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/routing/app_router.dart';
-import '../../core/services/onboarding_storage.dart';
-import '../../core/utils/onboarding_manager.dart';
-import '../../enums/onboarding_enum.dart';
-import '../../data/models/mandal.dart';
-import '../../navigators/onboarding_navigator.dart';
-import '../../providers/app_providers.dart';
-import '../../shared/widgets/custom_button.dart';
-import '../../shared/widgets/shimmer_widget.dart';
-import '../../shared/widgets/auto_scaled_text.dart';
+
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_font_sizes.dart';
+import '../../core/constants/app_spacing.dart';
+import '../../shared/widgets/custom_button.dart';
+import '../../core/routing/app_router.dart';
+import '../../core/services/onboarding_storage.dart';
+import '../../core/services/push_notification_service.dart';
 import '../../features/onboarding/location_view_model.dart';
+import '../../providers/app_providers.dart';
+import 'onboarding_widgets.dart';
 
-class MandalSelectionScreen extends ConsumerWidget {
+class MandalSelectionScreen extends ConsumerStatefulWidget {
   const MandalSelectionScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final locationViewModel = ref.watch(locationViewModelProvider);
+  ConsumerState<MandalSelectionScreen> createState() =>
+      _MandalSelectionScreenState();
+}
+
+class _MandalSelectionScreenState extends ConsumerState<MandalSelectionScreen> {
+  String _query = '';
+  bool _isContinuing = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final vm = ref.watch(locationViewModelProvider);
+    final theme = Theme.of(context);
+
+    final filtered = _query.isEmpty
+        ? vm.mandals
+        : vm.mandals
+            .where((m) => m.name.toLowerCase().contains(_query.toLowerCase()))
+            .toList();
 
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: Text(
-          'Select Mandal (Your Area)',
-          style: TextStyle(
-            fontSize: appFontSizeTitle,
-            fontWeight: FontWeight.w600,
-            color: Theme.of(context).textTheme.headlineLarge?.color,
-          ),
-        ),
-        centerTitle: true,
-        leading: IconButton(
-          icon: Icon(
-            Icons.arrow_back,
-            color: Theme.of(context).textTheme.bodyLarge?.color,
-          ),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
+      backgroundColor: Colors.white,
       body: SafeArea(
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Header section
+            // ── Header ───────────────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.sm, AppSpacing.sm, AppSpacing.lg, 0,
+              ),
+              child: Row(
                 children: [
-                  Container(
-                    width: 60,
-                    height: 60,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF2196F3),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Center(
-                      child: Icon(Icons.place, color: Colors.white, size: 32),
-                    ),
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back_rounded),
+                    color: const Color(0xFF1C1C1E),
+                    onPressed: () => Navigator.pop(context),
                   ),
-                  const SizedBox(height: 16),
+                  const Spacer(),
                   Text(
-                    'Choose your Mandal(Your Area)',
+                    'Step 3 of 3',
                     style: TextStyle(
-                      fontSize: appFontSizeHeader,
-                      fontWeight: FontWeight.w600,
-                      color: Theme.of(context).textTheme.headlineMedium?.color,
+                      fontSize: scaledFontSize(13),
+                      color: theme.appTextSecondary,
+                      fontWeight: FontWeight.w500,
                     ),
-                    textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 8),
-                  if (locationViewModel.selectedState != null &&
-                      locationViewModel.selectedDistrict != null) ...[
-                    Text(
-                      'in ${locationViewModel.selectedDistrict!.name}, ${locationViewModel.selectedState!.name}',
-                      style: TextStyle(
-                        fontSize: appFontSizeBody,
-                        color: Theme.of(context).textTheme.bodyMedium?.color,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
                 ],
               ),
             ),
 
-            // Mandals list
-            Expanded(child: _buildMandalsList(context, locationViewModel, ref)),
-
-            // Continue button (shown when mandal is selected)
-            if (locationViewModel.selectedMandal != null) ...[
-              Padding(
-                padding: const EdgeInsets.all(24),
-                child: CustomButton(
-                  text: 'Continue',
-                  onPressed: () => _handleContinue(context, locationViewModel),
-                  backgroundColor: const Color(0xFF2196F3),
-                  textColor: Colors.white,
-                  width: double.infinity,
-                  height: 56,
-                  borderRadius: 12,
-                ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm,
               ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMandalsList(
-    BuildContext context,
-    LocationViewModel locationViewModel,
-    WidgetRef ref,
-  ) {
-    if (locationViewModel.isLoadingMandals) {
-      return _buildLoadingList();
-    }
-
-    if (locationViewModel.mandalsError != null) {
-      return _buildErrorWidget(
-        context,
-        'Failed to load mandals',
-        locationViewModel.mandalsError!,
-        () => locationViewModel.retryLoadMandals(),
-      );
-    }
-
-    if (locationViewModel.mandals.isEmpty) {
-      return Center(
-        child: Text(
-          'No mandals available',
-          style: TextStyle(fontSize: appFontSizeSubHeader, color: Colors.grey),
-        ),
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      itemCount: locationViewModel.mandals.length,
-      itemBuilder: (context, index) {
-        final mandal = locationViewModel.mandals[index];
-        final isSelected = locationViewModel.selectedMandal?.id == mandal.id;
-        return _buildMandalItem(
-          context,
-          mandal,
-          locationViewModel,
-          isSelected,
-          ref,
-        );
-      },
-    );
-  }
-
-  Widget _buildMandalItem(
-    BuildContext context,
-    Mandal mandal,
-    LocationViewModel locationViewModel,
-    bool isSelected,
-    WidgetRef ref,
-  ) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: isSelected
-            ? Theme.of(context).appSelectionBackground
-            : null,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isSelected
-              ? Theme.of(context).appSelectionPrimary
-              : Theme.of(context).appGrey300,
-          width: isSelected ? 2 : 1,
-        ),
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        title: Text(
-          mandal.name,
-          style: TextStyle(
-            fontSize: appFontSizeSubHeader,
-            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-            color: isSelected
-                ? Theme.of(context).appSelectionPrimary
-                : Theme.of(context).textTheme.bodyLarge?.color,
-          ),
-        ),
-        trailing: isSelected
-            ? Icon(
-                Icons.check_circle,
-                color: Theme.of(context).appSelectionPrimary,
-                size: 24,
-              )
-            : Icon(
-                Icons.radio_button_unchecked,
-                size: 24,
-                color: Colors.grey[400],
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  LocationStepIndicator(currentStep: 3),
+                  const SizedBox(height: AppSpacing.lg),
+                  Text(
+                    'Choose your Area',
+                    style: TextStyle(
+                      fontSize: scaledFontSize(22),
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF1C1C1E),
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                  // Breadcrumb: State > District
+                  if (vm.selectedState != null &&
+                      vm.selectedDistrict != null) ...[
+                    const SizedBox(height: AppSpacing.xs),
+                    Row(
+                      children: [
+                        Icon(Icons.location_on_rounded,
+                            size: 14, color: theme.appPrimary),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${vm.selectedState!.name}  ›  ${vm.selectedDistrict!.name}',
+                          style: TextStyle(
+                            fontSize: scaledFontSize(13),
+                            color: theme.appPrimary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: AppSpacing.lg),
+                  LocationSearchBar(
+                    hint: 'Search areas...',
+                    onChanged: (v) => setState(() => _query = v),
+                  ),
+                ],
               ),
-        onTap: () => _onMandalSelected(mandal, ref),
-      ),
-    );
-  }
-
-  Widget _buildLoadingList() {
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      itemCount: 10,
-      itemBuilder: (context, index) {
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 10.0),
-          child: ShimmerWidget(
-            width: double.infinity,
-            borderRadius: BorderRadius.circular(4),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildErrorWidget(
-    BuildContext context,
-    String title,
-    String error,
-    VoidCallback onRetry,
-  ) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.error_outline, size: 64, color: Theme.of(context).appErrorLight),
-            const SizedBox(height: 16),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: appFontSizeHeader,
-                fontWeight: FontWeight.w600,
-                color: Theme.of(context).appErrorMedium,
-              ),
-              textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 8),
-            Text(
-              error,
-              style: TextStyle(
-                fontSize: appFontSizeBody,
-                color: Theme.of(context).appErrorMedium,
-              ),
-              textAlign: TextAlign.center,
+
+            // ── List ─────────────────────────────────────────────────
+            Expanded(
+              child: vm.isLoadingMandals
+                  ? buildLoadingList()
+                  : vm.mandalsError != null
+                  ? buildErrorWidget(
+                      context, vm.mandalsError!, vm.retryLoadMandals)
+                  : filtered.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No areas found',
+                        style: TextStyle(
+                          fontSize: scaledFontSize(14),
+                          color: theme.appTextSecondary,
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.lg,
+                        vertical: AppSpacing.sm,
+                      ),
+                      itemCount: filtered.length,
+                      itemBuilder: (_, i) {
+                        final m = filtered[i];
+                        final selected = vm.selectedMandal?.id == m.id;
+                        return LocationListItem(
+                          name: m.name,
+                          isSelected: selected,
+                          showChevron: false,
+                          onTap: () => ref
+                              .read(locationViewModelProvider)
+                              .setSelectedMandal(m),
+                        );
+                      },
+                    ),
             ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: onRetry,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Theme.of(context).appErrorMedium,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 32,
-                  vertical: 12,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
+
+            // ── Continue button ───────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, AppSpacing.xl,
               ),
-              child: const Text('Retry'),
+              child: CustomButton(
+                text: vm.selectedMandal != null
+                    ? 'Continue with ${vm.selectedMandal!.name}'
+                    : 'Select an area to continue',
+                width: double.infinity,
+                isLoading: _isContinuing,
+                onPressed: vm.selectedMandal != null && !_isContinuing
+                    ? () => _handleContinue(vm)
+                    : null,
+              ),
             ),
           ],
         ),
@@ -275,49 +175,54 @@ class MandalSelectionScreen extends ConsumerWidget {
     );
   }
 
-  void _onMandalSelected(Mandal mandal, WidgetRef ref) {
-    // Set selected mandal in view model
-    ref.read(locationViewModelProvider).setSelectedMandal(mandal);
-  }
-
-  void _handleContinue(
-    BuildContext context,
-    LocationViewModel locationViewModel,
-  ) async {
-    // Only allow continuation if location is fully complete
-    if (!locationViewModel.isLocationComplete) {
-      return;
-    }
-
+  Future<void> _handleContinue(LocationViewModel vm) async {
+    if (!vm.isLocationComplete) return;
+    setState(() => _isContinuing = true);
     try {
       final storage = OnboardingStorage();
 
-      // Save the selected location
+      // Whether onboarding was already done tells us how we got here: a first
+      // run (this screen sits on top of the onboarding stack) or a later
+      // location change (it sits on top of the app). The two need different
+      // exits — see below.
+      final wasOnboarded = await storage.isOnboardingCompleted();
+
       await storage.saveSelectedLocation(
-        locationViewModel.selectedState!,
-        locationViewModel.selectedDistrict!,
-        locationViewModel.selectedMandal!,
+        vm.selectedState!,
+        vm.selectedDistrict!,
+        vm.selectedMandal!,
       );
-
       await storage.setLocationCompleted();
+      // Location is the only onboarding step left, so finishing it finishes
+      // onboarding outright.
+      await storage.setOnboardingCompleted();
 
-      final onboardingManager = OnboardingManager(storage);
-      final step = await onboardingManager.getCurrentStep();
+      // Push targeting is keyed on the device's registered location, so the
+      // backend has to hear about this change or the device keeps receiving
+      // pushes for wherever it was first registered.
+      unawaited(PushNotificationService.instance.onLocationChanged());
 
-      // If onboarding is already complete, user is just changing location — pop back
-      if (step == OnboardingStep.completed && context.mounted) {
-        Navigator.of(context).popUntil((route) => route.isFirst);
+      if (!mounted) return;
+
+      if (wasOnboarded) {
+        // Changing location from inside the app: the onboarding screens were
+        // pushed on top of the running app, so unwinding them lands back on it.
+        Navigator.of(context).popUntil((r) => r.isFirst);
         return;
       }
 
-      OnboardingNavigator.navigate(context, step, replace: false);
-    } catch (e) {
-      debugPrint('Location onboarding error: $e');
-      Navigator.pushNamedAndRemoveUntil(
-        context,
-        AppRouter.languageSelection,
-        (_) => false,
-      );
+      // First run: the onboarding stack was pushed with removeUntil, so its own
+      // intro screen ("Where are you from?") is the first route — popping to it
+      // would just restart the flow. Go to home and drop onboarding entirely.
+      Navigator.pushNamedAndRemoveUntil(context, AppRouter.home, (_) => false);
+    } catch (_) {
+      if (mounted) {
+        Navigator.pushNamedAndRemoveUntil(
+          context, AppRouter.locationSelection, (_) => false,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isContinuing = false);
     }
   }
 }

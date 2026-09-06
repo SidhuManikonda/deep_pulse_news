@@ -1,9 +1,13 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:deep_pulse_news/extensions/user_extensions.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../core/services/api_service.dart';
 import '../../core/services/auth_storage.dart';
 import '../../core/services/onboarding_storage.dart';
+import '../../core/services/push_notification_service.dart';
 import '../../data/models/auth_response.dart';
 import '../../data/models/user.dart';
 import '../../data/repositories/auth_repository.dart';
@@ -51,7 +55,7 @@ class AuthViewModel extends ChangeNotifier {
         notifyListeners();
         return;
       }
-  
+
       _token = storedToken;
       _isAuthenticated = true;
 
@@ -69,11 +73,22 @@ class AuthViewModel extends ChangeNotifier {
         await logout();
         AlertPopupManager().showAlert(
           title: 'Account Blocked',
-          message: 'Your account has been blocked by admin. Please contact support.',
+          message:
+              'Your account has been blocked by admin. Please contact support.',
           type: AlertType.error,
         );
         return;
       }
+
+      // Re-bind the device's FCM token to this user on every launch. The
+      // splash's PushNotificationService.init() deliberately skips guest
+      // registration when a session exists, so this is what keeps a
+      // logged-in user attached to their notifications across restarts.
+      unawaited(
+        PushNotificationService.instance.saveTokenForLoggedInUser(
+          userId: _user!.id,
+        ),
+      );
 
       notifyListeners();
     } catch (e) {
@@ -102,12 +117,14 @@ class AuthViewModel extends ChangeNotifier {
 
       // Block login if user is blocked by admin
       if (response.user.isBlockedByAdmin) {
-        _error = 'Your account has been blocked by admin. Please contact support.';
+        _error =
+            'Your account has been blocked by admin. Please contact support.';
         _isLoading = false;
         notifyListeners();
         AlertPopupManager().showAlert(
           title: 'Account Blocked',
-          message: 'Your account has been blocked by admin. Please contact support.',
+          message:
+              'Your account has been blocked by admin. Please contact support.',
           type: AlertType.error,
         );
         return false;
@@ -192,18 +209,25 @@ class AuthViewModel extends ChangeNotifier {
     required int districtId,
     required int mandalId,
     String? mobile,
+    String? profilePhoto,
   }) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
 
     try {
+      final deviceId = await PushNotificationService.instance.getDeviceId();
+      final fcmToken = await PushNotificationService.instance.getFcmToken();
+
       final response = await _authRepository.googleLogin(
         idToken: idToken,
         stateId: stateId,
         districtId: districtId,
         mandalId: mandalId,
         mobile: mobile,
+        deviceId: deviceId,
+        fcmToken: fcmToken,
+        profilePhoto: profilePhoto,
       );
 
       if (response == null) {
@@ -214,12 +238,14 @@ class AuthViewModel extends ChangeNotifier {
       }
 
       if (response.user.isBlockedByAdmin) {
-        _error = 'Your account has been blocked by admin. Please contact support.';
+        _error =
+            'Your account has been blocked by admin. Please contact support.';
         _isLoading = false;
         notifyListeners();
         AlertPopupManager().showAlert(
           title: 'Account Blocked',
-          message: 'Your account has been blocked by admin. Please contact support.',
+          message:
+              'Your account has been blocked by admin. Please contact support.',
           type: AlertType.error,
         );
         return false;
@@ -256,10 +282,81 @@ class AuthViewModel extends ChangeNotifier {
     await _authStorage.clearToken();
     ApiService.instance.setAuthToken(null);
 
+    // Detach the device token from the user and re-register it as a guest so
+    // the now-empty session no longer receives that user's notifications.
+    unawaited(PushNotificationService.instance.onLogout());
+
+    // NOTE: we deliberately do NOT clear OnboardingStorage here. The Gmail
+    // SSO screen pre-fills the prior user's location for fast same-user
+    // relogin, and the new user can tap "Change" on the location card to
+    // pick a different state/district/mandal inline. Wiping here would
+    // strand the next user without a way to set location before signing in.
+
     _resetAuthState();
 
     _isLoading = false;
     notifyListeners();
+  }
+
+  Future<bool> deleteAccount() async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    final ok = await _authRepository.deleteAccount();
+
+    if (!ok) {
+      _error = 'Could not delete account. Please try again.';
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+
+    await _authStorage.clearToken();
+    ApiService.instance.setAuthToken(null);
+
+    // Same as logout(): keep OnboardingStorage intact so the SSO screen
+    // can pre-fill location for whoever signs in next. They can tap
+    // "Change" on the location card to override.
+
+    _resetAuthState();
+
+    _isLoading = false;
+    notifyListeners();
+    return true;
+  }
+
+  Future<bool> updateProfileImage(File image) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final newUrl = await _authRepository.updateProfileImage(image);
+
+      if (newUrl == null) {
+        _error = 'Failed to upload profile photo. Please try again.';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+
+      if (newUrl.isNotEmpty && _user != null) {
+        _user = _user!.copyWith(profilePhoto: newUrl);
+      } else {
+        // Backend didn't return URL in the upload response — refresh /user.
+        await _fetchCurrentUser();
+      }
+
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _error = 'Failed to upload profile photo: $e';
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
   }
 
   // ===================== HELPERS =====================
@@ -282,7 +379,16 @@ class AuthViewModel extends ChangeNotifier {
     if (_user == null) return;
 
     try {
-      final hasApiLocations = _user!.stateId != null;
+      // A location the user picked by hand on the profile screen wins over the
+      // account's registered location. This runs on every app launch (via
+      // initializeAuth → _fetchCurrentUser), so without this check the stored
+      // pick was overwritten with the account location each relaunch and the
+      // feed snapped back to the user's original area.
+      final manualUserId = await _onboardingStorage.getLocationManualUserId();
+      final pickedState = await _onboardingStorage.getSelectedState();
+      final honorManualPick = manualUserId == _user!.id && pickedState != null;
+
+      final hasApiLocations = _user!.stateId != null && !honorManualPick;
 
       if (hasApiLocations) {
         // Fetch location names in parallel for speed
@@ -304,13 +410,21 @@ class AuthViewModel extends ChangeNotifier {
 
         final states = results[0] as List<location_models.State>;
         final districts = results[1] as List<District>;
-        final mandals = results[2] as List<Mandal>;
+        var mandals = results[2] as List<Mandal>;
 
         final state = states.where((s) => s.id == _user!.stateId).firstOrNull;
         var district = _user!.districtId != null
             ? districts.where((d) => d.id == _user!.districtId).firstOrNull
             : null;
         district ??= districts.isNotEmpty ? districts.first : null;
+
+        // If we fell back to first-of-state because user.districtId was null,
+        // mandals weren't pre-fetched — load them now for the resolved
+        // district so we don't persist `mandal=null` to storage and end up
+        // showing "...null" on the gmail-sso screen later.
+        if (district != null && mandals.isEmpty) {
+          mandals = await mandalRepo.getMandalsByDistrict(district.id);
+        }
 
         var mandal = _user!.mandalId != null
             ? mandals.where((m) => m.id == _user!.mandalId).firstOrNull
@@ -329,14 +443,20 @@ class AuthViewModel extends ChangeNotifier {
 
         // Save to onboarding storage so home screen picks it up
         if (state != null) {
-          await _onboardingStorage.saveSelectedLocation(state, district, mandal);
+          await _onboardingStorage.saveSelectedLocation(
+            state,
+            district,
+            mandal,
+          );
         }
 
         debugPrint(
           'Using API locations: ${state?.name}, ${district?.name}, ${mandal?.name}',
         );
       } else {
-        // No API locations — fallback to onboarding cache
+        // Either the account has no location, or the user picked one by hand —
+        // in both cases device storage is the source of truth and the in-memory
+        // user is brought in line with it (rather than the other way round).
         final selectedState = await _onboardingStorage.getSelectedState();
         final selectedDistrict = await _onboardingStorage.getSelectedDistrict();
         final selectedMandal = await _onboardingStorage.getSelectedMandal();
@@ -359,6 +479,32 @@ class AuthViewModel extends ChangeNotifier {
     }
   }
 
+  /// Persists a location the user picked by hand and marks it as theirs, so it
+  /// survives app relaunches instead of being overwritten by the account's
+  /// registered location. Also updates the in-memory user, so pickers reopened
+  /// in the same session show the new location as current.
+  Future<void> applyManualLocation(
+    location_models.State state,
+    District? district,
+    Mandal? mandal,
+  ) async {
+    await _onboardingStorage.saveSelectedLocation(state, district, mandal);
+
+    if (_user == null) return;
+
+    await _onboardingStorage.setLocationManuallySetBy(_user!.id);
+
+    _user = _user!.copyWith(
+      stateId: state.id,
+      stateName: state.name,
+      districtId: district?.id,
+      districtName: district?.name,
+      mandalId: mandal?.id,
+      mandalName: mandal?.name,
+    );
+    notifyListeners();
+  }
+
   Future<void> _applyAuthSuccess(AuthResponse response) async {
     _user = response.user;
     _token = response.accessToken;
@@ -368,6 +514,25 @@ class AuthViewModel extends ChangeNotifier {
 
     await _authStorage.saveToken(response.accessToken);
     ApiService.instance.setAuthToken(response.accessToken);
+
+    // Sync the API user's location (stateId/districtId/mandalId) into
+    // OnboardingStorage immediately. Without this, the home screen (which
+    // reads location from OnboardingStorage) keeps showing the *previous*
+    // location until the app is restarted — visible after an admin changes
+    // a user's role/area and the user logs back in.
+    if (_user != null) {
+      await _mergeOnboardingLocationData();
+
+      // Bind this device's FCM token to the now-logged-in user so push
+      // notifications target their account (not the guest/device channel).
+      // Fire-and-forget: notification binding must never block or fail login.
+      // The auth bearer was set above, so the authed `/fcm-token` call works.
+      unawaited(
+        PushNotificationService.instance.saveTokenForLoggedInUser(
+          userId: _user!.id,
+        ),
+      );
+    }
 
     notifyListeners();
   }
@@ -398,7 +563,8 @@ class AuthViewModel extends ChangeNotifier {
 
     // Validate role permissions
     if (!_canCreateUserRole(userRole)) {
-      _error = 'You do not have permission to create users with role: $userRole';
+      _error =
+          'You do not have permission to create users with role: $userRole';
       notifyListeners();
       return false;
     }
@@ -465,7 +631,7 @@ class AuthViewModel extends ChangeNotifier {
     }
 
     // Sub-admin can create Dist-reporters and reporters (roles 3 and 4)
-    if (currentRole == 'subadmin') {
+    if (currentRole == 'sub_admin') {
       return targetRole == 3 || targetRole == 4; // Dist-reporter and reporter
     }
 
@@ -489,7 +655,7 @@ class AuthViewModel extends ChangeNotifier {
     }
 
     // Sub-admin can assign within their state
-    if (currentRole == 'subadmin') {
+    if (currentRole == 'sub_admin') {
       return stateId == _user!.stateId;
     }
 
@@ -516,7 +682,7 @@ class AuthViewModel extends ChangeNotifier {
     switch (currentRole) {
       case 'admin':
         return [2, 3, 4]; // subAdmin, Dist-reporter, reporter
-      case 'subadmin':
+      case 'sub_admin':
         return [3, 4]; // Dist-reporter, reporter
       case 'dist-reporter':
         return [4]; // reporter

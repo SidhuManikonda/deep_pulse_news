@@ -6,27 +6,18 @@ class OnboardingManager {
   OnboardingManager(this._onboardingStorage);
   
   /// Gets the current onboarding step
-  /// Flow: Location → Language → Topics → Completed (Home)
+  /// Flow: Location → Completed (Home)
+  ///
+  /// Language and topics selection were dropped from onboarding; picking a
+  /// location is the only step left. `isLocationCompleted` is also accepted as
+  /// "done" so existing installs that were parked mid-flow (location saved,
+  /// language/topics never answered) land on home instead of a dead route.
   Future<OnboardingStep> getCurrentStep() async {
-    // Check if all onboarding steps are completed
-    if (await _onboardingStorage.isOnboardingCompleted()) {
+    if (await _onboardingStorage.isOnboardingCompleted() ||
+        await _onboardingStorage.isLocationCompleted()) {
       return OnboardingStep.completed;
     }
-    
-    // Check if location and language are done, but topics is not
-    if (await _onboardingStorage.isLocationCompleted() &&
-        await _onboardingStorage.isLanguageCompleted() &&
-        !await _onboardingStorage.isTopicsCompleted()) {
-      return OnboardingStep.topics;
-    }
-    
-    // Check if location is done but language is not
-    if (await _onboardingStorage.isLocationCompleted() &&
-        !await _onboardingStorage.isLanguageCompleted()) {
-      return OnboardingStep.language;
-    }
-    
-    // Default: start with location selection
+
     return OnboardingStep.location;
   }
   

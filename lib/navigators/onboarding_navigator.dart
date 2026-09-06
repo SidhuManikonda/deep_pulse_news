@@ -22,10 +22,6 @@ class OnboardingNavigator {
         return AppRouter.locationSelection;
       case OnboardingStep.completed:
         return AppRouter.home;
-      case OnboardingStep.language:
-        return AppRouter.languageSelection;
-      case OnboardingStep.topics:
-        return AppRouter.topicsSelection;
     }
   }
 }

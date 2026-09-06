@@ -11,7 +11,7 @@
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     
     <application
-        android:label="Deep Pulse News"
+        android:label="Deep Pulse"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -35,7 +35,27 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Android App Links: a tapped news URL opens the app directly
+                 (no browser/chooser) once Android verifies our ownership of
+                 api.deeppulse.media via the assetlinks.json file the backend
+                 hosts at /.well-known/assetlinks.json. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https"
+                      android:host="api.deeppulse.media"
+                      android:pathPrefix="/news/"/>
+            </intent-filter>
         </activity>
+        <!-- Route FCM's own notifications (the ones Android builds while the
+             app is backgrounded) into the same max-importance channel the app
+             creates at startup, so they appear as heads-up banners at the top
+             rather than silently in the shade. Must match _kChannelId in
+             push_notification_service.dart. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="deep_pulse_news_alerts" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
@@ -55,6 +75,19 @@
         <intent>
             <action android:name="android.intent.action.VIEW"/>
             <data android:scheme="whatsapp"/>
+        </intent>
+        <!-- Required on Android 11+ for url_launcher to resolve http(s) and mailto URLs. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="http"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SENDTO"/>
+            <data android:scheme="mailto"/>
         </intent>
     </queries>
 </manifest>

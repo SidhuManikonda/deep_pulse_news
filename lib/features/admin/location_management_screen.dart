@@ -6,6 +6,7 @@ import '../../core/constants/app_font_sizes.dart';
 import '../../data/models/district.dart';
 import '../../data/models/state.dart' as location_models;
 import '../../providers/app_providers.dart';
+import '../../shared/widgets/app_loader.dart';
 import 'location_management_controller.dart';
 
 class LocationManagementScreen extends ConsumerStatefulWidget {
@@ -131,6 +132,22 @@ class _StatesTab extends ConsumerWidget {
                 isActive: state.isActive,
                 subtitle: 'ID: ${state.id}',
                 theme: theme,
+                onRename: (newName) async {
+                  final success = await controller.renameState(state, newName);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          success
+                              ? 'Renamed to "$newName"'
+                              : controller.updateError ??
+                                    'Failed to rename state',
+                        ),
+                      ),
+                    );
+                  }
+                  return success;
+                },
                 onDelete: () async {
                   final success = await controller.deleteState(state);
                   if (context.mounted) {
@@ -234,6 +251,25 @@ class _DistrictsTab extends ConsumerWidget {
                       isActive: district.isActive,
                       subtitle: 'ID: ${district.id}',
                       theme: theme,
+                      onRename: (newName) async {
+                        final success = await controller.renameDistrict(
+                          district,
+                          newName,
+                        );
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                success
+                                    ? 'Renamed to "$newName"'
+                                    : controller.updateError ??
+                                          'Failed to rename district',
+                              ),
+                            ),
+                          );
+                        }
+                        return success;
+                      },
                       onDelete: () async {
                         final success = await controller.deleteDistrict(
                           district,
@@ -372,6 +408,21 @@ class _MandalsTab extends ConsumerWidget {
           isActive: mandal.isActive,
           subtitle: 'ID: ${mandal.id}',
           theme: theme,
+          onRename: (newName) async {
+            final success = await controller.renameMandal(mandal, newName);
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    success
+                        ? 'Renamed to "$newName"'
+                        : controller.updateError ?? 'Failed to rename mandal',
+                  ),
+                ),
+              );
+            }
+            return success;
+          },
           onDelete: () async {
             final success = await controller.deleteMandal(mandal);
             if (context.mounted) {
@@ -411,7 +462,7 @@ Widget _buildListContent({
           return ListView(
             children: const [
               SizedBox(height: 120),
-              Center(child: CircularProgressIndicator()),
+              InlineLoader(),
             ],
           );
         }
@@ -662,12 +713,17 @@ class _LocationTile extends StatelessWidget {
   final ThemeData theme;
   final VoidCallback? onDelete;
 
+  /// Renames this location. Receives the new name and reports whether the
+  /// server accepted it, so the dialog can stay open on failure.
+  final Future<bool> Function(String newName)? onRename;
+
   const _LocationTile({
     required this.name,
     required this.isActive,
     required this.subtitle,
     required this.theme,
     this.onDelete,
+    this.onRename,
   });
 
   @override
@@ -741,16 +797,45 @@ class _LocationTile extends StatelessWidget {
           color: theme.appTextSecondary,
         ),
       ),
-      trailing: onDelete != null
-          ? IconButton(
-              icon: Icon(
-                Icons.delete_outline,
-                size: 20,
-                color: Colors.red.withOpacity(0.7),
-              ),
-              onPressed: () => _confirmDelete(context),
-            )
-          : null,
+      trailing: (onRename == null && onDelete == null)
+          ? null
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (onRename != null)
+                  IconButton(
+                    tooltip: 'Rename',
+                    visualDensity: VisualDensity.compact,
+                    icon: Icon(
+                      Icons.edit_outlined,
+                      size: 20,
+                      color: theme.appPrimary.withOpacity(0.8),
+                    ),
+                    onPressed: () => _promptRename(context),
+                  ),
+                if (onDelete != null)
+                  IconButton(
+                    tooltip: 'Delete',
+                    visualDensity: VisualDensity.compact,
+                    icon: Icon(
+                      Icons.delete_outline,
+                      size: 20,
+                      color: Colors.red.withOpacity(0.7),
+                    ),
+                    onPressed: () => _confirmDelete(context),
+                  ),
+              ],
+            ),
+    );
+  }
+
+  void _promptRename(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => _RenameDialog(
+        currentName: name,
+        onSubmit: onRename!,
+      ),
     );
   }
 
@@ -778,6 +863,123 @@ class _LocationTile extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Rename prompt for a state / district / mandal. Keeps itself open (with the
+/// error inline) when the server rejects the change, so a typo or a network
+/// blip doesn't lose what the admin typed.
+class _RenameDialog extends StatefulWidget {
+  final String currentName;
+  final Future<bool> Function(String newName) onSubmit;
+
+  const _RenameDialog({required this.currentName, required this.onSubmit});
+
+  @override
+  State<_RenameDialog> createState() => _RenameDialogState();
+}
+
+class _RenameDialogState extends State<_RenameDialog> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.currentName,
+  );
+  bool _isSaving = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final newName = _controller.text.trim();
+    if (newName.isEmpty) {
+      setState(() => _error = 'Name cannot be empty');
+      return;
+    }
+    if (newName == widget.currentName) {
+      Navigator.pop(context);
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+      _error = null;
+    });
+
+    final ok = await widget.onSubmit(newName);
+    if (!mounted) return;
+
+    if (ok) {
+      Navigator.pop(context);
+    } else {
+      setState(() {
+        _isSaving = false;
+        _error = 'Could not save. Please try again.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return AlertDialog(
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: const Text('Rename location'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            enabled: !_isSaving,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => _submit(),
+            style: TextStyle(
+              fontSize: scaledFontSize(15),
+              color: theme.appTextPrimary,
+            ),
+            decoration: InputDecoration(
+              labelText: 'Name',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: Text(
+                _error!,
+                style: TextStyle(
+                  fontSize: scaledFontSize(13),
+                  color: Colors.red,
+                ),
+              ),
+            ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isSaving ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: _isSaving ? null : _submit,
+          child: _isSaving
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Save'),
+        ),
+      ],
     );
   }
 }

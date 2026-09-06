@@ -52,7 +52,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       debugPrint('Onboarding navigation error: $e');
       Navigator.pushNamedAndRemoveUntil(
         context,
-        AppRouter.languageSelection,
+        AppRouter.locationSelection,
         (_) => false,
       );
     }

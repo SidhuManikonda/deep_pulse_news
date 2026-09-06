@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 class User {
   final int id;
   final String name;
@@ -21,6 +23,7 @@ class User {
   final String? mandalName;
   final bool? isBlocked;
   final bool isBlockedByAdmin;
+  final String? profilePhoto;
 
   User({
     required this.id,
@@ -45,6 +48,7 @@ class User {
     this.mandalName,
     this.isBlocked,
     this.isBlockedByAdmin = false,
+    this.profilePhoto,
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
@@ -85,7 +89,40 @@ class User {
       isBlockedByAdmin: json['is_blocked_by_admin'] is int
           ? json['is_blocked_by_admin'] == 1
           : json['is_blocked_by_admin'] == true,
+      profilePhoto: _extractProfilePhoto(json),
     );
+  }
+
+  /// Pulls the profile_photo URL from wherever the backend put it: top level
+  /// (`json['profile_photo']`) or nested under `user_detail`. Logs both
+  /// candidate spots so we can confirm what the backend actually returned —
+  /// remove the debugPrint lines once we know the field is wired correctly.
+  static String? _extractProfilePhoto(Map<String, dynamic> json) {
+    final topLevel = json['profile_photo'];
+    final detailMap = json['user_detail'] is Map
+        ? json['user_detail'] as Map
+        : null;
+    final detail = detailMap?['profile_photo'];
+    debugPrint('[User.fromJson] profile_photo lookup');
+    debugPrint('  top-level profile_photo = $topLevel');
+    debugPrint('  user keys               = ${json.keys.toList()}');
+    debugPrint('  user_detail keys        = ${detailMap?.keys.toList()}');
+    debugPrint('  user_detail.profile_photo = $detail');
+    // Also flag anything photo-ish in case the backend used a different key
+    final photoLike = <String>[
+      ...json.keys.where((k) => k.toString().toLowerCase().contains('photo')
+          || k.toString().toLowerCase().contains('picture')
+          || k.toString().toLowerCase().contains('avatar')
+          || k.toString().toLowerCase().contains('image')),
+      if (detailMap != null)
+        ...detailMap.keys.where((k) => k.toString().toLowerCase().contains('photo')
+            || k.toString().toLowerCase().contains('picture')
+            || k.toString().toLowerCase().contains('avatar')
+            || k.toString().toLowerCase().contains('image'))
+          .map((k) => 'user_detail.$k'),
+    ];
+    debugPrint('  photo-ish keys found    = $photoLike');
+    return (topLevel as String?) ?? (detail as String?);
   }
 
   Map<String, dynamic> toJson() {
@@ -112,6 +149,7 @@ class User {
       'mandal_name': mandalName,
       'is_blocked': isBlocked,
       'is_blocked_by_admin': isBlockedByAdmin,
+      'profile_photo': profilePhoto,
     };
   }
 
@@ -138,6 +176,7 @@ class User {
     String? mandalName,
     bool? isBlocked,
     bool? isBlockedByAdmin,
+    String? profilePhoto,
   }) {
     return User(
       id: id ?? this.id,
@@ -162,6 +201,7 @@ class User {
       mandalName: mandalName ?? this.mandalName,
       isBlocked: isBlocked ?? this.isBlocked,
       isBlockedByAdmin: isBlockedByAdmin ?? this.isBlockedByAdmin,
+      profilePhoto: profilePhoto ?? this.profilePhoto,
     );
   }
 }

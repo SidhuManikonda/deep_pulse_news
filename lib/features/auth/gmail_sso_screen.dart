@@ -15,6 +15,9 @@ import '../../core/utils/onboarding_manager.dart';
 import '../../data/models/district.dart';
 import '../../data/models/mandal.dart';
 import '../../data/models/state.dart' as location_models;
+import '../../data/repositories/district_repository.dart';
+import '../../data/repositories/mandal_repository.dart';
+import '../../data/repositories/state_repository.dart';
 import '../../navigators/onboarding_navigator.dart';
 import '../../providers/app_providers.dart';
 
@@ -48,7 +51,7 @@ class _GmailSsoScreenState extends ConsumerState<GmailSsoScreen> {
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: ['email', 'profile'],
     serverClientId:
-        '703254694314-oiulcsg77m85arnib2s5hlpr0978qcvh.apps.googleusercontent.com',
+        '668367572887-s59rn9mbsn9i8vljtguja8uhj9fj34rr.apps.googleusercontent.com',
   );
 
   @override
@@ -119,13 +122,22 @@ class _GmailSsoScreenState extends ConsumerState<GmailSsoScreen> {
         _isSigningIn = false;
       });
     } on PlatformException catch (e) {
+      // Log the FULL exception so we can debug. Don't rely on the friendly
+      // message — it hides the underlying cause.
+      debugPrint('========== GOOGLE SIGN-IN FAILED ==========');
+      debugPrint('PlatformException.code:    ${e.code}');
+      debugPrint('PlatformException.message: ${e.message}');
+      debugPrint('PlatformException.details: ${e.details}');
+      debugPrint('===========================================');
+
       String friendlyMessage;
       if (e.message?.contains('ApiException: 10') == true ||
           e.code == 'sign_in_failed') {
         friendlyMessage =
             'Google Sign-In setup error. Ensure both Android and Web OAuth '
             'client IDs are created in Google Cloud Console with the correct '
-            'SHA-1 fingerprint and package name.';
+            'SHA-1 fingerprint and package name.\n\n'
+            'Debug: ${e.code} / ${e.message}';
       } else if (e.message?.contains('ApiException: 12501') == true) {
         friendlyMessage = 'Sign-in cancelled';
       } else if (e.message?.contains('ApiException: 7') == true) {
@@ -179,6 +191,7 @@ class _GmailSsoScreenState extends ConsumerState<GmailSsoScreen> {
         districtId: _selectedDistrict!.id,
         mandalId: _selectedMandal!.id,
         mobile: mobileToSend,
+        profilePhoto: _googleUser!.photoUrl,
       );
 
       if (!success || !mounted) {
@@ -204,7 +217,7 @@ class _GmailSsoScreenState extends ConsumerState<GmailSsoScreen> {
         if (mounted) {
           Navigator.pushNamedAndRemoveUntil(
             context,
-            AppRouter.languageSelection,
+            AppRouter.locationSelection,
             (_) => false,
           );
         }
@@ -277,10 +290,14 @@ class _GmailSsoScreenState extends ConsumerState<GmailSsoScreen> {
                     _buildUserCard(theme),
                     const SizedBox(height: AppSpacing.lg),
 
-                    if (_selectedState != null) ...[
-                      _buildLocationCard(theme),
-                      const SizedBox(height: AppSpacing.lg),
-                    ],
+                    // Always show the location card after sign-in. If a
+                    // location is set (same-device relogin / completed
+                    // onboarding) it's pre-filled and the user can tap
+                    // "Change" to override. If nothing is set yet, the
+                    // card shows a "Set location" prompt so the user is
+                    // never stranded without a way to pick.
+                    _buildLocationCard(theme),
+                    const SizedBox(height: AppSpacing.lg),
 
                     // Mobile field — only shown when no saved number, or user taps Change
                     _buildMobileSection(theme),
@@ -368,6 +385,15 @@ class _GmailSsoScreenState extends ConsumerState<GmailSsoScreen> {
   }
 
   Widget _buildLocationCard(ThemeData theme) {
+    final hasLocation = _selectedState != null;
+    final locationText = hasLocation
+        ? [
+            _selectedState?.name,
+            _selectedDistrict?.name,
+            _selectedMandal?.name,
+          ].where((n) => n != null && n.isNotEmpty).join(', ')
+        : 'No location set';
+
     return Container(
       padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
@@ -380,16 +406,178 @@ class _GmailSsoScreenState extends ConsumerState<GmailSsoScreen> {
           const SizedBox(width: AppSpacing.sm + 2),
           Expanded(
             child: Text(
-              '${_selectedState?.name}, ${_selectedDistrict?.name}, ${_selectedMandal?.name}',
+              locationText,
               style: TextStyle(
                 fontWeight: FontWeight.w500,
-                color: theme.appTextPrimary,
+                color: hasLocation
+                    ? theme.appTextPrimary
+                    : theme.appTextSecondary,
                 fontSize: scaledFontSize(13),
+                fontStyle: hasLocation ? FontStyle.normal : FontStyle.italic,
+              ),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          // "Change" / "Set" link — the location is pre-filled from the
+          // previous session for fast same-user relogin. A different user
+          // signing in on the same device taps here to pick their own
+          // state / district / mandal without killing the app.
+          GestureDetector(
+            onTap: _openLocationPicker,
+            child: Text(
+              hasLocation ? 'Change' : 'Set',
+              style: TextStyle(
+                fontSize: scaledFontSize(13),
+                color: theme.appSelectionPrimary,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  // ── Inline location picker ───────────────────────────────────────
+  /// Runs three sequential bottom-sheet pickers (state → district → mandal),
+  /// each loading its list from the appropriate repository. Cancelling at
+  /// any step leaves the existing selection untouched; completing all three
+  /// persists the new selection to OnboardingStorage so it survives reloads.
+  Future<void> _openLocationPicker() async {
+    final messenger = ScaffoldMessenger.of(context);
+
+    try {
+      // State
+      final states = await StateRepositoryImpl().getStates();
+      if (!mounted) return;
+      final state = await _showPickerSheet<location_models.State>(
+        title: 'Select State',
+        items: states,
+        itemLabel: (s) => s.name,
+        selectedId: _selectedState?.id,
+        idOf: (s) => s.id,
+      );
+      if (state == null || !mounted) return;
+
+      // District (filtered by state)
+      final districts = await DistrictRepositoryImpl().getDistrictsByState(state.id);
+      if (!mounted) return;
+      if (districts.isEmpty) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('No districts available for this state')),
+        );
+        return;
+      }
+      final district = await _showPickerSheet<District>(
+        title: 'Select District',
+        items: districts,
+        itemLabel: (d) => d.name,
+        // Only pre-select the prior district if the state didn't change
+        selectedId: state.id == _selectedState?.id ? _selectedDistrict?.id : null,
+        idOf: (d) => d.id,
+      );
+      if (district == null || !mounted) return;
+
+      // Mandal (filtered by district)
+      final mandals = await MandalRepositoryImpl().getMandalsByDistrict(district.id);
+      if (!mounted) return;
+      if (mandals.isEmpty) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('No mandals available for this district')),
+        );
+        return;
+      }
+      final mandal = await _showPickerSheet<Mandal>(
+        title: 'Select Mandal',
+        items: mandals,
+        itemLabel: (m) => m.name,
+        selectedId: district.id == _selectedDistrict?.id ? _selectedMandal?.id : null,
+        idOf: (m) => m.id,
+      );
+      if (mandal == null || !mounted) return;
+
+      // Persist + update form state
+      await OnboardingStorage().saveSelectedLocation(state, district, mandal);
+      if (!mounted) return;
+      setState(() {
+        _selectedState = state;
+        _selectedDistrict = district;
+        _selectedMandal = mandal;
+        _error = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text('Failed to load location options: $e')),
+      );
+    }
+  }
+
+  /// Generic bottom-sheet list picker. Returns the chosen item or `null` if
+  /// the user dismissed the sheet. Highlights the current selection.
+  Future<T?> _showPickerSheet<T>({
+    required String title,
+    required List<T> items,
+    required String Function(T) itemLabel,
+    required int Function(T) idOf,
+    int? selectedId,
+  }) {
+    final theme = Theme.of(context);
+    return showModalBottomSheet<T>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: theme.scaffoldBackgroundColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return FractionallySizedBox(
+          heightFactor: 0.7,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: scaledFontSize(16),
+                          fontWeight: FontWeight.w700,
+                          color: theme.appTextPrimary,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: ListView.separated(
+                  itemCount: items.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (_, i) {
+                    final item = items[i];
+                    final isSelected = selectedId != null && idOf(item) == selectedId;
+                    return ListTile(
+                      title: Text(itemLabel(item)),
+                      trailing: isSelected
+                          ? Icon(Icons.check, color: theme.appSelectionPrimary)
+                          : null,
+                      onTap: () => Navigator.pop(ctx, item),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 

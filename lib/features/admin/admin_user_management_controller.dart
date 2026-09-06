@@ -87,6 +87,17 @@ class AdminUserManagementController extends ChangeNotifier {
     }
   }
 
+  /// Deletes a single comment (admin action) and removes it from the local
+  /// list on success so the UI updates without a full refetch.
+  Future<bool> deleteUserComment(int commentId) async {
+    final ok = await _commentsRepository.deleteComment(commentId: commentId);
+    if (ok) {
+      _userComments.removeWhere((e) => e.comment.id == commentId);
+      notifyListeners();
+    }
+    return ok;
+  }
+
   Future<bool> deleteUser({
     required AuthRepository authRepository,
     required int userId,
@@ -201,7 +212,7 @@ class AdminUserManagementController extends ChangeNotifier {
       mandalId = _selectedMandal?.id;
     }
 
-    if (currentRole == 'subadmin') {
+    if (currentRole == 'sub_admin') {
       stateId = currentUser.stateId;
       districtId = _selectedDistrict?.id;
       mandalId = _selectedMandal?.id;

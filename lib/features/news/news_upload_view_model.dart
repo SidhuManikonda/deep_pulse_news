@@ -34,6 +34,11 @@ class NewsUploadViewModel extends ChangeNotifier {
   final List<NewsMedia> _existingMedia = []; // Media from prefilled news
   bool _acceptTerms = false;
 
+  /// Sponsor creatives attached to this article (image or video), sent as
+  /// `ad_1` / `ad_2`. Optional — most articles carry none.
+  File? _ad1;
+  File? _ad2;
+
   // Location data
   List<location_models.State> _availableStates = [];
   bool _isLoadingStates = false;
@@ -48,14 +53,23 @@ class NewsUploadViewModel extends ChangeNotifier {
   final List<int> _selectedDistrictIds = [];
   final List<int> _selectedMandalIds = [];
 
+  /// Id of the article the last successful [uploadNews] created or edited.
+  /// Needed so the publish push can carry `news_id` — without it a tapped
+  /// notification has nothing to open. Stays null when the backend replies
+  /// with a body we can't parse an id out of.
+  int? _lastUploadedNewsId;
+
   // ── Upload getters ──────────────────────────────────────────────────────────
   bool get isUploading => _isUploading;
   String? get error => _error;
+  int? get lastUploadedNewsId => _lastUploadedNewsId;
   bool? get isMoreChecked => _isMoreChecked;
   List<Topic> get selectedCategories => _selectedCategories;
   List<File> get selectedMedia => _selectedMedia;
   List<NewsMedia> get existingMedia => _existingMedia;
   bool get acceptTerms => _acceptTerms;
+  File? get ad1 => _ad1;
+  File? get ad2 => _ad2;
 
   // ── Location getters ────────────────────────────────────────────────────────
   List<location_models.State> get availableStates => _availableStates;
@@ -75,8 +89,9 @@ class NewsUploadViewModel extends ChangeNotifier {
       .expand((id) => _districtsByState[id] ?? <District>[])
       .toList();
 
-  List<District> get selectedDistricts =>
-      availableDistricts.where((d) => _selectedDistrictIds.contains(d.id)).toList();
+  List<District> get selectedDistricts => availableDistricts
+      .where((d) => _selectedDistrictIds.contains(d.id))
+      .toList();
 
   List<Mandal> get availableMandals => _selectedDistrictIds
       .expand((id) => _mandalsByDistrict[id] ?? <Mandal>[])
@@ -104,12 +119,25 @@ class NewsUploadViewModel extends ChangeNotifier {
       _selectedCategories.any((t) => t.id == category.id);
 
   void addMedia(File file) {
+    debugPrint(
+      '[addMedia] adding 1 file. before=${_selectedMedia.length}, '
+      'path=${file.path}',
+    );
     _selectedMedia.add(file);
+    debugPrint('[addMedia] after=${_selectedMedia.length}');
     notifyListeners();
   }
 
   void addMultipleMedia(List<File> files) {
+    debugPrint(
+      '[addMultipleMedia] received ${files.length} files. '
+      'before=${_selectedMedia.length}',
+    );
+    for (var i = 0; i < files.length; i++) {
+      debugPrint('  [$i] ${files[i].path}');
+    }
     _selectedMedia.addAll(files);
+    debugPrint('[addMultipleMedia] after=${_selectedMedia.length}');
     notifyListeners();
   }
 
@@ -120,6 +148,16 @@ class NewsUploadViewModel extends ChangeNotifier {
 
   void removeExistingMedia(int index) {
     _existingMedia.removeAt(index);
+    notifyListeners();
+  }
+
+  /// [slot] is 1 or 2. Passing null clears that slot.
+  void setAd(int slot, File? file) {
+    if (slot == 1) {
+      _ad1 = file;
+    } else {
+      _ad2 = file;
+    }
     notifyListeners();
   }
 
@@ -152,12 +190,14 @@ class NewsUploadViewModel extends ChangeNotifier {
     if (_selectedStateIds.contains(state.id)) {
       _selectedStateIds.remove(state.id);
       // Cascade-deselect districts & mandals belonging to this state
-      final districtIds =
-          (_districtsByState[state.id] ?? []).map((d) => d.id).toList();
+      final districtIds = (_districtsByState[state.id] ?? [])
+          .map((d) => d.id)
+          .toList();
       _selectedDistrictIds.removeWhere(districtIds.contains);
       for (final dId in districtIds) {
-        final mandalIds =
-            (_mandalsByDistrict[dId] ?? []).map((m) => m.id).toList();
+        final mandalIds = (_mandalsByDistrict[dId] ?? [])
+            .map((m) => m.id)
+            .toList();
         _selectedMandalIds.removeWhere(mandalIds.contains);
       }
       notifyListeners();
@@ -168,8 +208,8 @@ class NewsUploadViewModel extends ChangeNotifier {
         _loadingDistrictStateIds.add(state.id);
         notifyListeners();
         try {
-          _districtsByState[state.id] =
-              await _districtRepository.getDistrictsByState(state.id);
+          _districtsByState[state.id] = await _districtRepository
+              .getDistrictsByState(state.id);
         } catch (_) {
           _districtsByState[state.id] = [];
         }
@@ -183,8 +223,9 @@ class NewsUploadViewModel extends ChangeNotifier {
     if (_selectedDistrictIds.contains(district.id)) {
       _selectedDistrictIds.remove(district.id);
       // Cascade-deselect mandals belonging to this district
-      final mandalIds =
-          (_mandalsByDistrict[district.id] ?? []).map((m) => m.id).toList();
+      final mandalIds = (_mandalsByDistrict[district.id] ?? [])
+          .map((m) => m.id)
+          .toList();
       _selectedMandalIds.removeWhere(mandalIds.contains);
       notifyListeners();
     } else {
@@ -194,8 +235,8 @@ class NewsUploadViewModel extends ChangeNotifier {
         _loadingMandalDistrictIds.add(district.id);
         notifyListeners();
         try {
-          _mandalsByDistrict[district.id] =
-              await _mandalRepository.getMandalsByDistrict(district.id);
+          _mandalsByDistrict[district.id] = await _mandalRepository
+              .getMandalsByDistrict(district.id);
         } catch (_) {
           _mandalsByDistrict[district.id] = [];
         }
@@ -224,11 +265,14 @@ class NewsUploadViewModel extends ChangeNotifier {
     notifyListeners();
 
     // Fetch mandals for districts that haven't been loaded yet, in parallel
-    final toFetch = districts.where((d) => !_mandalsByDistrict.containsKey(d.id)).toList();
+    final toFetch = districts
+        .where((d) => !_mandalsByDistrict.containsKey(d.id))
+        .toList();
     if (toFetch.isNotEmpty) {
       final futures = toFetch.map((d) async {
         try {
-          _mandalsByDistrict[d.id] = await _mandalRepository.getMandalsByDistrict(d.id);
+          _mandalsByDistrict[d.id] = await _mandalRepository
+              .getMandalsByDistrict(d.id);
         } catch (_) {
           _mandalsByDistrict[d.id] = [];
         }
@@ -243,7 +287,9 @@ class NewsUploadViewModel extends ChangeNotifier {
     _selectedDistrictIds.removeWhere(ids.contains);
     // Also deselect mandals belonging to these districts
     for (final d in districts) {
-      final mandalIds = (_mandalsByDistrict[d.id] ?? []).map((m) => m.id).toList();
+      final mandalIds = (_mandalsByDistrict[d.id] ?? [])
+          .map((m) => m.id)
+          .toList();
       _selectedMandalIds.removeWhere(mandalIds.contains);
     }
     notifyListeners();
@@ -344,6 +390,10 @@ class NewsUploadViewModel extends ChangeNotifier {
     bool isImportant = false,
     bool isComment = true,
     bool showProfile = true,
+    bool isSendNotification = true,
+    String? titleColor,
+    String? descriptionColor,
+    String? fullTextColor,
   }) async {
     _isUploading = true;
     _error = null;
@@ -373,6 +423,9 @@ class NewsUploadViewModel extends ChangeNotifier {
 
       // Compress media files before uploading
       final processedFiles = <File>[];
+      // Server-side limit per file. Keep ~500 KB under to leave room for
+      // multipart overhead. If you bump the backend limit, bump this too.
+      const maxBytesPerFile = 10 * 1024 * 1024 - 500 * 1024; // ~9.5 MB
       for (final file in mediaFiles) {
         final path = file.path.toLowerCase();
         if (path.endsWith('.mp4') ||
@@ -428,6 +481,22 @@ class NewsUploadViewModel extends ChangeNotifier {
         }
       }
 
+      // Fail fast if any processed file is still over the backend limit.
+      // Without this we'd waste minutes uploading a 24 MB video only for
+      // the server to reject it with `files.0: max 10240 KB`.
+      for (var i = 0; i < processedFiles.length; i++) {
+        final size = await processedFiles[i].length();
+        if (size > maxBytesPerFile) {
+          final mb = (size / (1024 * 1024)).toStringAsFixed(1);
+          _error =
+              'File ${i + 1} is $mb MB — exceeds the 10 MB per-file '
+              'limit. Please pick a shorter video or smaller image.';
+          _isUploading = false;
+          notifyListeners();
+          return false;
+        }
+      }
+
       final newsRequest = CreateNewsRequest(
         topicIds: categories.map((t) => t.id).toList(),
         status: status ?? (editNewsId != null ? 'published' : 'pending'),
@@ -439,15 +508,23 @@ class NewsUploadViewModel extends ChangeNotifier {
         districtIds: List.from(_selectedDistrictIds),
         mandalIds: List.from(_selectedMandalIds),
         files: processedFiles,
+        ad1: _ad1,
+        ad2: _ad2,
         isImportant: isImportant,
         isComment: isComment,
         showProfile: showProfile,
+        isSendNotification: isSendNotification,
+        titleColor: titleColor,
+        descriptionColor: descriptionColor,
+        fullTextColor: fullTextColor,
       );
 
       if (editNewsId != null) {
         await _newsRepository.updateNews(editNewsId, newsRequest);
+        _lastUploadedNewsId = editNewsId;
       } else {
-        await _newsRepository.createNews(newsRequest);
+        final created = await _newsRepository.createNews(newsRequest);
+        _lastUploadedNewsId = created?.id;
       }
       _isUploading = false;
       notifyListeners();
@@ -476,9 +553,12 @@ class NewsUploadViewModel extends ChangeNotifier {
         .trim()
         .split(RegExp(r'\s+'))
         .take(4)
-        .map((w) => w
-            .toLowerCase()
-            .replaceAll(RegExp(r'[^\p{L}\p{N}]', unicode: true), ''))
+        .map(
+          (w) => w.toLowerCase().replaceAll(
+            RegExp(r'[^\p{L}\p{N}]', unicode: true),
+            '',
+          ),
+        )
         .where((w) => w.isNotEmpty)
         .toList();
 

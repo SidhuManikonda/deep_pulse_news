@@ -6,9 +6,9 @@ extension AppColorsExtension on ThemeData {
   bool get _isLight => brightness == Brightness.light;
 
   // Primary Colors (same for both themes)
-  Color get appPrimary => const Color(0xFFC62828);
-  Color get appPrimaryDark => const Color(0xFFC53030);
-  Color get appPrimaryLight => const Color(0xFFFC8181);
+  Color get appPrimary => const Color(0xFF2563EB);      // Premium Vivid Blue
+  Color get appPrimaryDark => const Color(0xFF1D4ED8);  // Deeper Blue
+  Color get appPrimaryLight => const Color(0xFF93C5FD); // Soft Blue
 
   // Background Colors (theme-aware)
   Color get appBackground =>
@@ -93,9 +93,9 @@ extension AppColorsExtension on ThemeData {
 //------------------------------------------------------------------------------
 // Light Theme Color Constants
 //------------------------------------------------------------------------------
-const Color appPrimaryLightColor = Color(0xFFE53E3E);
-const Color appPrimaryDarkLightColor = Color(0xFFC53030);
-const Color appPrimaryLightLightColor = Color(0xFFFC8181);
+const Color appPrimaryLightColor = Color(0xFF2563EB);      // Premium Vivid Blue
+const Color appPrimaryDarkLightColor = Color(0xFF1D4ED8);  // Deeper Blue
+const Color appPrimaryLightLightColor = Color(0xFF93C5FD); // Soft Blue
 const Color appBackgroundLightColor = Color(0xFFFFFFFF);
 const Color appSurfaceLightColor = Color(0xFFF7FAFC);
 const Color appTextPrimaryLightColor = Color(0xFF2D3748);
@@ -120,7 +120,7 @@ const Color appGrey600LightColor = Color(0xFF4B5563);
 const Color appGrey700LightColor = Color(0xFF374151);
 const Color appGrey800LightColor = Color(0xFF1F2937);
 const Color appGrey900LightColor = Color(0xFF111827);
-const Color appBottomNavSelectedLightColor = Color(0xFFE53E3E);
+const Color appBottomNavSelectedLightColor = Color(0xFF2563EB);
 const Color appBottomNavUnselectedLightColor = Color(0xFF718096);
 const Color appCardLightColor = Color(0xFFF7FAFC);
 const Color shimmerBaseLightColor = Color(0xFFE5E7EB);
@@ -146,7 +146,7 @@ const Color appGrey600DarkColor = Color(0xFF666666);
 const Color appGrey700DarkColor = Color(0xFF808080);
 const Color appGrey800DarkColor = Color(0xFF999999);
 const Color appGrey900DarkColor = Color(0xFFB3B3B3);
-const Color appBottomNavSelectedDarkColor = Color(0xFFE53E3E);
+const Color appBottomNavSelectedDarkColor = Color(0xFF93C5FD);
 const Color appBottomNavUnselectedDarkColor = Color(0xFFA0AEC0);
 const Color appCardDarkColor = Color(0xFF1A1A1A);
 const Color shimmerBaseDarkColor = Color(0xFF1F1F1F);
@@ -171,3 +171,41 @@ const Color appAlertSuccessColor = Color(0xFF16A34A);
 const Color appAlertErrorColor   = Color(0xFFDC2626);
 const Color appAlertWarningColor  = Color(0xFFD97706);
 const Color appAlertInfoColor     = Color(0xFF2563EB);
+
+//------------------------------------------------------------------------------
+// Primary Gradient — use Theme.of(context).primaryGradient
+//------------------------------------------------------------------------------
+extension AppGradientExtension on ThemeData {
+  /// Dark premium gradient for buttons and hero surfaces.
+  /// Warm dark charcoal-slate → deep navy blue — premium, not pure black.
+  LinearGradient get primaryGradient => const LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [
+      Color(0xFF1e293b), // Slate 800 — warm dark charcoal with blue tint
+      Color(0xFF1e40af), // Blue 800  — deep rich navy
+    ],
+  );
+
+  /// Subtle tinted surface — icon containers, selected chips, highlight rows.
+  LinearGradient get primarySoftGradient => const LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [
+      Color(0xFFEFF6FF), // Blue-50
+      Color(0xFFDBEAFE), // Blue-100
+    ],
+  );
+
+  /// Three-stop hero gradient — use for large banners or app-bar backgrounds.
+  LinearGradient get heroGradient => const LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [
+      Color(0xFF0f172a), // Slate 900 — near-black
+      Color(0xFF1e293b), // Slate 800
+      Color(0xFF1e40af), // Blue  800
+    ],
+    stops: [0.0, 0.45, 1.0],
+  );
+}

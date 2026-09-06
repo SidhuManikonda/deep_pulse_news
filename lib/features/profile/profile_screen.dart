@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:deep_pulse_news/core/constants/app_constants.dart';
+import 'package:deep_pulse_news/core/services/media_picker_services.dart';
 import 'package:deep_pulse_news/features/admin/location_management_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,13 +9,17 @@ import '../../core/constants/app_colors.dart';
 import '../../data/models/user.dart';
 import '../../providers/app_providers.dart';
 import 'saved_news_screen.dart';
+import '../../shared/widgets/cached_image_widget.dart';
 import '../../core/services/onboarding_storage.dart';
+import '../../core/services/push_notification_service.dart';
 import '../../data/models/state.dart' as location_models;
 import '../../data/models/district.dart';
 import '../../data/models/mandal.dart';
 import '../../extensions/user_extensions.dart';
 import '../../data/repositories/auth_repository.dart';
+import '../auth/auth_helper.dart';
 import '../../features/admin/admin_user_management_hub_screen.dart';
+import '../../features/admin/ads_management_screen.dart';
 import '../../features/admin/news_management_screen.dart';
 import '../../core/constants/app_font_sizes.dart';
 import '../home/home_view_model.dart';
@@ -33,6 +40,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   Map<String, dynamic>? _selectedLanguage;
   List<Map<String, dynamic>> _selectedTopics = [];
   bool _isLoadingLocation = false;
+  bool _isUploadingPhoto = false;
 
   @override
   void initState() {
@@ -71,335 +79,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
     // ── New UI ─────────────────────────────────────────────────────────
     return _buildNewScreen(context, user, theme, isAuthenticated);
-
-    /* ── Old UI (kept for reference) ─────────────────────────────────
-    return SafeArea(
-      top: false,
-      left: false,
-      right: false,
-      bottom: true,
-      child: Scaffold(
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        body: CustomScrollView(
-          slivers: [
-            // Custom App Bar with gradient
-            SliverAppBar(
-              expandedHeight: 200,
-              pinned: true,
-              backgroundColor: theme.appPrimary,
-              leading: IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.white),
-                onPressed: () => Navigator.pop(context),
-              ),
-              flexibleSpace: FlexibleSpaceBar(
-                background: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        theme.appPrimary,
-                        theme.appPrimary.withOpacity(0.8),
-                        theme.appPrimaryDark,
-                      ],
-                    ),
-                  ),
-                  child: SafeArea(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const SizedBox(height: 20),
-                        // Profile Avatar
-                        Container(
-                          width: 80,
-                          height: 80,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.2),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: Center(
-                            child: Text(
-                              isAuthenticated && user.name.isNotEmpty
-                                  ? user.name[0].toUpperCase()
-                                  : 'G', // G for Guest
-                              style: TextStyle(
-                                fontSize: scaledFontSize(25),
-                                fontWeight: FontWeight.bold,
-                                color: theme.appPrimary,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        // User Name or Guest
-                        Text(
-                          isAuthenticated
-                              ? (user.name.isNotEmpty ? user.name : 'User')
-                              : 'Guest User',
-                          style: TextStyle(
-                            fontSize: scaledFontSize(20),
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        // Location or Login prompt
-                        Text(
-                          isAuthenticated
-                              ? (user.email.isNotEmpty
-                                    ? user.email
-                                    : 'No email set')
-                              : _getLocationDisplayText(),
-                          style: TextStyle(
-                            fontSize: scaledFontSize(14),
-                            color: Colors.white.withOpacity(0.9),
-                          ),
-                        ),
-                        // const Divider(),
-                        // Center(
-                        //   child: Row(
-                        //     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        //     children: [
-                        //       Text(
-                        //         "Followers 150",
-                        //         style: TextStyle(
-                        //           fontSize: scaledFontSize(14),
-                        //           color: Colors.white.withOpacity(0.9),
-                        //         ),
-                        //       ),
-                        //       Container(
-                        //         color: Theme.of(context).appDivider,
-                        //         width: 1,
-                        //         height: 20,
-                        //       ),
-                        //       Text(
-                        //         "Following 150",
-                        //         style: TextStyle(
-                        //           fontSize: scaledFontSize(14),
-                        //           color: Colors.white.withOpacity(0.9),
-                        //         ),
-                        //       ),
-                        //     ],
-                        //   ),
-                        // ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-            // Profile Content
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Account Section - conditional based on authentication
-                    _buildSectionHeader('Account'),
-                    // const SizedBox(height: 12),
-                    if (isAuthenticated)
-                      _buildProfileCard([])
-                    else
-                      _buildProfileCard([
-                        _buildProfileTile(
-                          icon: Icons.login,
-                          iconColor: theme.appPrimary,
-                          title: 'Login',
-                          subtitle: 'Sign in to access all features',
-                          onTap: () =>
-                              Navigator.pushNamed(context, '/gmail-sso'),
-                        ),
-                      ]),
-                    const SizedBox(height: 24),
-
-                    // Saved News
-                    _buildProfileCard([
-                      _buildDivider(),
-                      _buildProfileTile(
-                        icon: Icons.bookmark_outline,
-                        iconColor: Colors.amber,
-                        title: 'Saved News',
-                        subtitle: 'View your saved articles',
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const SavedNewsScreen(),
-                          ),
-                        ),
-                      ),
-                    ]),
-                    const SizedBox(height: 24),
-
-                    // Management Section - Show for admin, sub-admin, and dist-reporter
-                    if (isAuthenticated &&
-                        (user.primaryRole.value == 'admin' ||
-                            user.primaryRole.value == 'subadmin' ||
-                            user.primaryRole.value == 'dist-reporter')) ...[
-                      _buildSectionHeader('Management'),
-                      const SizedBox(height: 12),
-                      _buildProfileCard([
-                        if (user.primaryRole.value == 'admin' ||
-                            user.primaryRole.value == 'subadmin') ...[
-                          _buildProfileTile(
-                            icon: Icons.people_alt_outlined,
-                            iconColor: theme.appPrimary,
-                            title: 'User Management',
-                            subtitle: 'View users and create new users',
-                            onTap: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    const AdminUserManagementHubScreen(),
-                              ),
-                            ),
-                          ),
-                          _buildDivider(),
-                        ],
-                        _buildProfileTile(
-                          icon: Icons.newspaper_outlined,
-                          iconColor: Colors.deepOrange,
-                          title: 'News Management',
-                          subtitle: 'Manage pending, published & rejected news',
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  const NewsManagementScreen(),
-                            ),
-                          ),
-                        ),
-                        if (isAuthenticated &&
-                            (user.primaryRole.value == 'admin')) ...[
-                          _buildDivider(),
-                          _buildProfileTile(
-                            icon: Icons.location_city_outlined,
-                            iconColor: Colors.deepOrange,
-                            title: 'Location Management',
-                            subtitle: 'Manage states, districts & mandals',
-                            onTap: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    const LocationManagementScreen(),
-                              ),
-                            ),
-                          ),
-                        ],
-                        // _buildDivider(),
-                        // if (isAuthenticated &&
-                        //     (user.primaryRole.value == 'admin')) ...[
-                        //   _buildProfileTile(
-                        //     icon: Icons.lock_outline,
-                        //     iconColor: Colors.teal,
-                        //     title: 'Change Password',
-                        //     subtitle: 'Update your account password',
-                        //     onTap: () => _showChangePasswordDialog(context),
-                        //   ),
-                        // ],
-                      ]),
-                      const SizedBox(height: 24),
-                    ],
-
-                    // Preferences Section
-                    _buildSectionHeader('Preferences'),
-                    const SizedBox(height: 12),
-                    _buildProfileCard([
-                      // _buildProfileTile(
-                      //   icon: Icons.language,
-                      //   iconColor: Colors.blue,
-                      //   title: 'Language',
-                      //   subtitle: _getLanguageDisplayText(),
-                      //   onTap: () => _navigateToLanguageSelection(context),
-                      // ),
-                      // _buildDivider(),
-                      Builder(
-                        builder: (context) {
-                          final role = user?.primaryRole.value ?? 'reader';
-                          final isLocked = role == 'reporter';
-                          final isSubAdmin = role == 'subadmin';
-                          final isDistrictReporter = role == 'dist-reporter';
-                          return _buildProfileTile(
-                            icon: Icons.location_on_outlined,
-                            iconColor: isLocked ? Colors.grey : Colors.red,
-                            title: 'Location',
-                            subtitle: _isLoadingLocation
-                                ? 'Loading...'
-                                : isLocked
-                                ? '${_getLocationDisplayText()} (Assigned)'
-                                : isSubAdmin
-                                ? '${_getLocationDisplayText()} (Change District/Mandal)'
-                                : isDistrictReporter
-                                ? '${_getLocationDisplayText()} (Change Mandal)'
-                                : _getLocationDisplayText(),
-                            trailing: isLocked
-                                ? Icon(
-                                    Icons.lock_outline,
-                                    size: 18,
-                                    color: Colors.grey,
-                                  )
-                                : null,
-                            onTap: isLocked
-                                ? () {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          'Location is assigned by admin and cannot be changed',
-                                        ),
-                                      ),
-                                    );
-                                  }
-                                : isSubAdmin
-                                ? () => _showDistrictMandalPicker(context, user)
-                                : isDistrictReporter
-                                ? () => _showMandalPicker(context, user)
-                                : () => _showFullLocationPicker(context),
-                          );
-                        },
-                      ),
-                    ]),
-
-                    const SizedBox(height: 24),
-
-                    _buildSectionHeader('Support'),
-                    const SizedBox(height: 12),
-                    _buildProfileCard([
-                      _buildProfileTile(
-                        icon: Icons.info_outline,
-                        iconColor: Colors.blueGrey,
-                        title: 'About',
-                        subtitle: 'Version ${AppConstants.appVersion}',
-                        onTap: () => _showAboutDialog(context),
-                      ),
-                    ]),
-
-                    const SizedBox(height: 24),
-
-                    // Logout Button - Only show if authenticated
-                    if (isAuthenticated) _buildLogoutButton(context),
-                    const SizedBox(height: 32),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-    // ──────────────────────────────────────────────────── */
   }
-
-  // ════════════════════════════════════════════════════════
-  // NEW UI
-  // ════════════════════════════════════════════════════════
 
   Widget _buildNewScreen(
     BuildContext context,
@@ -430,16 +110,37 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       subtitle: 'Sign in to access all features',
                       onTap: () => Navigator.pushNamed(context, '/gmail-sso'),
                     ),
+                  if (isAuthenticated)
+                    _buildNewTile(
+                      context: context,
+                      icon: Icons.person_outline_rounded,
+                      iconBg: const Color(0xFF4A80F0),
+                      title: 'Personal Information',
+                      subtitle: 'View your account details',
+                      showDivider: true,
+                      onTap: () => _showPersonalInfoSheet(context, user),
+                    ),
                   _buildNewTile(
                     context: context,
                     icon: Icons.bookmark_outline,
                     iconBg: const Color(0xFF7B61FF),
                     title: 'Saved News',
                     subtitle: 'View your saved articles',
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const SavedNewsScreen()),
-                    ),
+                    onTap: () async {
+                      final isAuthenticated = await AuthHelper.requireAuth(
+                        context,
+                        ref,
+                        title: 'Login to View Saved News',
+                        message: 'Please login to view your saved articles.',
+                      );
+                      if (!isAuthenticated || !mounted) return;
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const SavedNewsScreen(),
+                        ),
+                      );
+                    },
                   ),
                 ]),
                 const SizedBox(height: 20),
@@ -447,12 +148,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 // Management — admins/subadmins/dist-reporters only
                 if (isAuthenticated &&
                     (user!.primaryRole.value == 'admin' ||
-                        user.primaryRole.value == 'subadmin' ||
+                        user.primaryRole.value == 'sub_admin' ||
                         user.primaryRole.value == 'dist-reporter')) ...[
                   _buildNewSectionHeader('Management'),
                   _buildNewProfileCard([
                     if (user.primaryRole.value == 'admin' ||
-                        user.primaryRole.value == 'subadmin') ...[
+                        user.primaryRole.value == 'sub_admin') ...[
                       _buildNewTile(
                         context: context,
                         icon: Icons.people_alt_outlined,
@@ -462,7 +163,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         showDivider: true,
                         onTap: () => Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (_) => const AdminUserManagementHubScreen()),
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                const AdminUserManagementHubScreen(),
+                          ),
                         ),
                       ),
                     ],
@@ -472,13 +176,37 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       iconBg: const Color(0xFF28C76F),
                       title: 'News Management',
                       subtitle: 'Manage pending, published & rejected news',
-                      showDivider: user.primaryRole.value == 'admin',
+                      // Ads Management follows for every role that reaches
+                      // this card, so the divider is unconditional now.
+                      showDivider: true,
                       onTap: () => Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const NewsManagementScreen()),
+                        MaterialPageRoute(
+                          builder: (_) => const NewsManagementScreen(),
+                        ),
                       ),
                     ),
-                    if (user.primaryRole.value == 'admin')
+                    // Ads Management — admin, sub-admin and News Desk. Same
+                    // audience as News Management, since ad inventory is run
+                    // by whoever runs the desk.
+                    _buildNewTile(
+                      context: context,
+                      icon: Icons.campaign_outlined,
+                      iconBg: const Color(0xFF7B61FF),
+                      title: 'Ads Management',
+                      subtitle: 'Create & schedule adverts shown in the feed',
+                      showDivider:
+                          user.primaryRole.value == 'admin' ||
+                          user.primaryRole.value == 'sub_admin',
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const AdsManagementScreen(),
+                        ),
+                      ),
+                    ),
+                    if (user.primaryRole.value == 'admin' ||
+                        user.primaryRole.value == 'sub_admin')
                       _buildNewTile(
                         context: context,
                         icon: Icons.location_city_outlined,
@@ -487,7 +215,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         subtitle: 'Manage states, districts & mandals',
                         onTap: () => Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (_) => const LocationManagementScreen()),
+                          MaterialPageRoute(
+                            builder: (_) => const LocationManagementScreen(),
+                          ),
                         ),
                       ),
                   ]),
@@ -497,41 +227,49 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 // Preferences
                 _buildNewSectionHeader('Preferences'),
                 _buildNewProfileCard([
-                  Builder(builder: (ctx) {
-                    final role = user?.primaryRole.value ?? 'reader';
-                    final isLocked = role == 'reporter';
-                    final isSubAdmin = role == 'subadmin';
-                    final isDistrictReporter = role == 'dist-reporter';
-                    return _buildNewTile(
-                      context: ctx,
-                      icon: Icons.location_on_outlined,
-                      iconBg: const Color(0xFF7B61FF),
-                      title: 'Location',
-                      subtitle: _isLoadingLocation
-                          ? 'Loading...'
-                          : isLocked
-                          ? '${_getLocationDisplayText()} (Assigned)'
-                          : isSubAdmin
-                          ? '${_getLocationDisplayText()} (Change District/Mandal)'
-                          : isDistrictReporter
-                          ? '${_getLocationDisplayText()} (Change Mandal)'
-                          : _getLocationDisplayText(),
-                      trailing: isLocked
-                          ? Icon(Icons.lock_outline, size: 18, color: theme.appGrey400)
-                          : null,
-                      onTap: isLocked
-                          ? () => ScaffoldMessenger.of(ctx).showSnackBar(
+                  Builder(
+                    builder: (ctx) {
+                      final role = user?.primaryRole.value ?? 'reader';
+                      final isLocked = role == 'reporter';
+                      final isSubAdmin = role == 'sub_admin';
+                      final isDistrictReporter = role == 'dist-reporter';
+                      return _buildNewTile(
+                        context: ctx,
+                        icon: Icons.location_on_outlined,
+                        iconBg: const Color(0xFF7B61FF),
+                        title: 'Location',
+                        subtitle: _isLoadingLocation
+                            ? 'Loading...'
+                            : isLocked
+                            ? '${_getLocationDisplayText()} (Assigned)'
+                            : isSubAdmin
+                            ? '${_getLocationDisplayText()} (Change District/Mandal)'
+                            : isDistrictReporter
+                            ? '${_getLocationDisplayText()} (Change Mandal)'
+                            : _getLocationDisplayText(),
+                        trailing: isLocked
+                            ? Icon(
+                                Icons.lock_outline,
+                                size: 18,
+                                color: theme.appGrey400,
+                              )
+                            : null,
+                        onTap: isLocked
+                            ? () => ScaffoldMessenger.of(ctx).showSnackBar(
                                 const SnackBar(
-                                  content: Text('Location is assigned by admin and cannot be changed'),
+                                  content: Text(
+                                    'Location is assigned by admin and cannot be changed',
+                                  ),
                                 ),
                               )
-                          : isSubAdmin
-                          ? () => _showDistrictMandalPicker(ctx, user)
-                          : isDistrictReporter
-                          ? () => _showMandalPicker(ctx, user)
-                          : () => _showFullLocationPicker(ctx),
-                    );
-                  }),
+                            : isSubAdmin
+                            ? () => _showDistrictMandalPicker(ctx, user)
+                            : isDistrictReporter
+                            ? () => _showMandalPicker(ctx, user)
+                            : () => _showFullLocationPicker(ctx),
+                      );
+                    },
+                  ),
                 ]),
                 const SizedBox(height: 20),
 
@@ -566,37 +304,43 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     bool isAuthenticated,
   ) {
     return Container(
-      color: Colors.white,
+      decoration: BoxDecoration(gradient: theme.heroGradient),
       child: Stack(
         children: [
-          // Decorative circles — soft neutral tones on white
+          // Decorative circles — translucent white orbs on the dark gradient
           Positioned(
-            top: -30, right: -40,
+            top: -30,
+            right: -40,
             child: Container(
-              width: 150, height: 150,
-              decoration: const BoxDecoration(
+              width: 160,
+              height: 160,
+              decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Color(0xFFF0F2F8), // cool light grey
+                color: Colors.white.withValues(alpha: 0.07),
               ),
             ),
           ),
           Positioned(
-            top: 50, left: -50,
+            top: 55,
+            left: -50,
             child: Container(
-              width: 120, height: 120,
-              decoration: const BoxDecoration(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Color(0xFFF5F6FB), // near-white grey
+                color: Colors.white.withValues(alpha: 0.05),
               ),
             ),
           ),
           Positioned(
-            bottom: 10, right: 65,
+            bottom: 12,
+            right: 70,
             child: Container(
-              width: 60, height: 60,
-              decoration: const BoxDecoration(
+              width: 65,
+              height: 65,
+              decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Color(0xFFECEEF6), // slightly deeper grey
+                color: Colors.white.withValues(alpha: 0.06),
               ),
             ),
           ),
@@ -610,7 +354,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   Row(
                     children: [
                       IconButton(
-                        icon: const Icon(Icons.arrow_back, color: Color(0xFF1C1C1E)),
+                        icon: const Icon(Icons.arrow_back, color: Colors.white),
                         onPressed: () => Navigator.pop(context),
                       ),
                     ],
@@ -619,46 +363,109 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   // Avatar with edit badge
                   Stack(
                     children: [
-                      Container(
-                        width: 88, height: 88,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: const Color(0xFFECEEF6),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.08),
-                              blurRadius: 12,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Center(
-                          child: Text(
-                            isAuthenticated && user!.name.isNotEmpty
-                                ? user.name[0].toUpperCase()
-                                : 'G',
-                            style: const TextStyle(
-                              fontSize: 34,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF1C1C1E),
-                            ),
+                      GestureDetector(
+                        onTap:
+                            isAuthenticated &&
+                                (user?.profilePhoto?.isNotEmpty ?? false)
+                            ? () => _openProfilePhotoFullScreen(
+                                _sizedGooglePhoto(
+                                  user!.profilePhoto!,
+                                  1080,
+                                  cropToSquare: false,
+                                ),
+                              )
+                            : null,
+                        child: Container(
+                          width: 88,
+                          height: 88,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.white.withValues(alpha: 0.15),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.25),
+                                blurRadius: 16,
+                                offset: const Offset(0, 6),
+                              ),
+                            ],
                           ),
+                          clipBehavior: Clip.antiAlias,
+                          child:
+                              isAuthenticated &&
+                                  (user?.profilePhoto?.isNotEmpty ?? false)
+                              ? CachedImageWidget(
+                                  // Use ~400px source so the 88-pt circle
+                                  // stays crisp at 3x device pixel ratio
+                                  // (264 actual px) — Google's default
+                                  // `=s96-c` was upscaling and blurring.
+                                  imageUrl: _sizedGooglePhoto(
+                                    user!.profilePhoto!,
+                                    400,
+                                  ),
+                                  fit: BoxFit.cover,
+                                  placeholder: Container(
+                                    color: Colors.white.withValues(alpha: 0.1),
+                                  ),
+                                  errorWidget: Center(
+                                    child: Text(
+                                      user.name.isNotEmpty
+                                          ? user.name[0].toUpperCase()
+                                          : 'U',
+                                      style: const TextStyle(
+                                        fontSize: 34,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                )
+                              : Center(
+                                  child: Text(
+                                    isAuthenticated && user!.name.isNotEmpty
+                                        ? user.name[0].toUpperCase()
+                                        : 'G',
+                                    style: const TextStyle(
+                                      fontSize: 34,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
                         ),
                       ),
                       Positioned(
-                        bottom: 0, right: 0,
+                        bottom: 0,
+                        right: 0,
                         child: GestureDetector(
-                          onTap: isAuthenticated
-                              ? () => _showPersonalInfoSheet(context, user)
+                          onTap: isAuthenticated && !_isUploadingPhoto
+                              ? () => _showPhotoPickerSheet(context)
                               : null,
                           child: Container(
-                            width: 28, height: 28,
+                            width: 28,
+                            height: 28,
                             decoration: BoxDecoration(
-                              color: const Color(0xFF4A80F0),
+                              color: Colors.white,
                               shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 2),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.5),
+                                width: 1.5,
+                              ),
                             ),
-                            child: const Icon(Icons.edit, color: Colors.white, size: 14),
+                            child: _isUploadingPhoto
+                                ? Padding(
+                                    padding: const EdgeInsets.all(6),
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        theme.appPrimaryDark,
+                                      ),
+                                    ),
+                                  )
+                                : Icon(
+                                    Icons.camera_alt_rounded,
+                                    color: theme.appPrimaryDark,
+                                    size: 14,
+                                  ),
                           ),
                         ),
                       ),
@@ -672,7 +479,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF1C1C1E),
+                      color: Colors.white,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -680,7 +487,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     isAuthenticated
                         ? (user!.email.isNotEmpty ? user.email : 'No email set')
                         : _getLocationDisplayText(),
-                    style: const TextStyle(fontSize: 13, color: Color(0xFF8E8E93)),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.white.withValues(alpha: 0.7),
+                    ),
                   ),
                 ],
               ),
@@ -746,7 +556,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             child: Row(
               children: [
                 Container(
-                  width: 42, height: 42,
+                  width: 42,
+                  height: 42,
                   decoration: BoxDecoration(
                     color: iconBg.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(12),
@@ -778,13 +589,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   ),
                 ),
                 trailing ??
-                    Icon(Icons.chevron_right, color: theme.appGrey400, size: 20),
+                    Icon(
+                      Icons.chevron_right,
+                      color: theme.appGrey400,
+                      size: 20,
+                    ),
               ],
             ),
           ),
         ),
         if (showDivider)
-          Divider(height: 1, indent: 72, endIndent: 16, color: theme.appDivider),
+          Divider(
+            height: 1,
+            indent: 72,
+            endIndent: 16,
+            color: theme.appDivider,
+          ),
       ],
     );
   }
@@ -817,6 +637,369 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         ),
       ),
     );
+  }
+
+  void _showDeleteAccountConfirmation(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        return Container(
+          padding: EdgeInsets.fromLTRB(
+            24,
+            16,
+            24,
+            24 + MediaQuery.of(ctx).viewInsets.bottom,
+          ),
+          decoration: BoxDecoration(
+            color: theme.cardColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: theme.dividerColor,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Center(
+                child: Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.delete_forever_rounded,
+                    color: Colors.red.shade700,
+                    size: 32,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Center(
+                child: Text(
+                  'Delete account?',
+                  style: TextStyle(
+                    fontSize: scaledFontSize(20),
+                    fontWeight: FontWeight.bold,
+                    color: theme.textTheme.headlineSmall?.color,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'This will permanently:',
+                style: TextStyle(
+                  fontSize: scaledFontSize(13),
+                  fontWeight: FontWeight.w600,
+                  color: theme.textTheme.bodyLarge?.color,
+                ),
+              ),
+              const SizedBox(height: 6),
+              _deleteBulletPoint(ctx, 'Deactivate your account on the server'),
+              _deleteBulletPoint(
+                ctx,
+                'Stop all push notifications to your devices',
+              ),
+              _deleteBulletPoint(ctx, 'Log you out everywhere'),
+              const SizedBox(height: 10),
+              Text(
+                'You cannot recover this account afterwards.',
+                style: TextStyle(
+                  fontSize: scaledFontSize(12),
+                  color: theme.textTheme.bodyMedium?.color,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+              const SizedBox(height: 22),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        side: BorderSide(color: theme.dividerColor),
+                      ),
+                      child: Text(
+                        'Cancel',
+                        style: TextStyle(
+                          color: theme.textTheme.bodyLarge?.color,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        Navigator.pop(ctx);
+                        await _handleDeleteAccount();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red.shade700,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text(
+                        'Delete',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _deleteBulletPoint(BuildContext ctx, String text) {
+    final theme = Theme.of(ctx);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '• ',
+            style: TextStyle(
+              fontSize: scaledFontSize(13),
+              color: theme.textTheme.bodyMedium?.color,
+            ),
+          ),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                fontSize: scaledFontSize(13),
+                color: theme.textTheme.bodyMedium?.color,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Rewrites a Google profile photo URL to request a specific pixel size.
+  /// `cropToSquare: true` keeps Google's `-c` suffix (square center-crop) —
+  /// good for the circular avatar. `cropToSquare: false` drops the `-c` so
+  /// the full-screen viewer gets the photo at its native aspect ratio
+  /// instead of a square crop letterboxed inside a portrait viewport.
+  String _sizedGooglePhoto(String url, int size, {bool cropToSquare = true}) {
+    if (!url.contains('googleusercontent.com')) return url;
+    final suffix = cropToSquare ? '=s$size-c' : '=s$size';
+    final sizeMatch = RegExp(r'=s\d+(-c)?$');
+    if (sizeMatch.hasMatch(url)) {
+      return url.replaceFirst(sizeMatch, suffix);
+    }
+    return '$url$suffix';
+  }
+
+  void _openProfilePhotoFullScreen(String url) {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        opaque: false,
+        barrierColor: Colors.black,
+        transitionDuration: const Duration(milliseconds: 250),
+        pageBuilder: (_, __, ___) => _FullScreenPhotoViewer(imageUrl: url),
+      ),
+    );
+  }
+
+  void _showPhotoPickerSheet(BuildContext context) {
+    final theme = Theme.of(context);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: theme.cardColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              margin: const EdgeInsets.only(top: 10, bottom: 6),
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: theme.dividerColor,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Text(
+                'Update profile photo',
+                style: TextStyle(
+                  fontSize: scaledFontSize(16),
+                  fontWeight: FontWeight.w700,
+                  color: theme.textTheme.bodyLarge?.color,
+                ),
+              ),
+            ),
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: theme.appPrimary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  Icons.photo_library_rounded,
+                  color: theme.appPrimary,
+                  size: 22,
+                ),
+              ),
+              title: Text(
+                'Choose from gallery',
+                style: TextStyle(
+                  fontSize: scaledFontSize(14),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              onTap: () {
+                Navigator.pop(ctx);
+                _pickAndUploadPhoto(fromCamera: false);
+              },
+            ),
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0EA5E9).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.camera_alt_rounded,
+                  color: Color(0xFF0EA5E9),
+                  size: 22,
+                ),
+              ),
+              title: Text(
+                'Take a photo',
+                style: TextStyle(
+                  fontSize: scaledFontSize(14),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              onTap: () {
+                Navigator.pop(ctx);
+                _pickAndUploadPhoto(fromCamera: true);
+              },
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickAndUploadPhoto({required bool fromCamera}) async {
+    final picker = MediaPickerService();
+    try {
+      final file = fromCamera
+          ? await picker.capturePhoto()
+          : (await picker.pickImages()).firstOrNull;
+      if (file == null || !mounted) return;
+
+      setState(() => _isUploadingPhoto = true);
+      final authViewModel = ref.read(authViewModelProvider);
+      final success = await authViewModel.updateProfileImage(file);
+
+      if (!mounted) return;
+      setState(() => _isUploadingPhoto = false);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            success
+                ? 'Profile photo updated'
+                : (authViewModel.error ?? 'Failed to upload profile photo'),
+          ),
+          backgroundColor: success
+              ? const Color(0xFF16A34A)
+              : Colors.red.shade600,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isUploadingPhoto = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('$e'),
+          backgroundColor: Colors.red.shade600,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _handleDeleteAccount() async {
+    // Block UI with a loading indicator while the request is in flight.
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    final authViewModel = ref.read(authViewModelProvider);
+    final success = await authViewModel.deleteAccount();
+
+    if (!mounted) return;
+    // Dismiss the loading dialog.
+    Navigator.of(context).pop();
+
+    if (success) {
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        '/gmail-sso',
+        (route) => false,
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Could not delete account. Please try again.'),
+          backgroundColor: Colors.red.shade600,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      );
+    }
   }
 
   // ════════════════════════════════════════════════════════
@@ -1105,28 +1288,90 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             const SizedBox(height: 24),
             _buildInfoRow('Name', user?.name ?? 'Not set'),
             _buildInfoRow('Email', user?.email ?? 'Not set'),
-            _buildInfoRow('Mobile', user?.mobile ?? 'Not set'),
+            // _buildInfoRow('Mobile', user?.mobile ?? 'Not set'),
             _buildInfoRow(
               'Role',
               user?.roles?.isNotEmpty == true ? user!.roles![0].name : 'User',
             ),
-            _buildInfoRow(
-              'Permissions',
-              user?.roles?.isNotEmpty == true
-                  ? '${user!.roles![0].permissions?.length ?? 0} permissions'
-                  : 'Standard permissions',
+            // _buildInfoRow(
+            //   'Permissions',
+            //   user?.roles?.isNotEmpty == true
+            //       ? '${user!.roles![0].permissions?.length ?? 0} permissions'
+            //       : 'Standard permissions',
+            // ),
+            // _buildInfoRow(
+            //   'Account Status',
+            //   user?.isActive == true ? 'Active' : 'Inactive',
+            // ),
+            // _buildInfoRow(
+            //   'Member Since',
+            //   user?.createdAt != null
+            //       ? '${user!.createdAt.day}/${user.createdAt.month}/${user.createdAt.year}'
+            //       : 'Unknown',
+            // ),
+            const SizedBox(height: 8),
+            // Visual + semantic separation: regular account info above,
+            // destructive action below. Placed inside this sheet so it's only
+            // reached via the deliberate "edit profile" gesture, not from the
+            // main screen where an accidental tap could happen.
+            Divider(color: Theme.of(context).dividerColor.withOpacity(0.4)),
+            const SizedBox(height: 8),
+            InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () {
+                // Close this sheet first, then open the confirmation
+                // — stacking two modal sheets feels janky.
+                Navigator.pop(context);
+                _showDeleteAccountConfirmation(this.context);
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 12,
+                  horizontal: 4,
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.delete_outline_rounded,
+                      size: 20,
+                      color: Colors.red.shade600,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Delete account',
+                            style: TextStyle(
+                              fontSize: scaledFontSize(14),
+                              fontWeight: FontWeight.w600,
+                              color: Colors.red.shade600,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Permanently remove your account and data',
+                            style: TextStyle(
+                              fontSize: scaledFontSize(11),
+                              color: Theme.of(
+                                context,
+                              ).textTheme.bodyMedium?.color,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(
+                      Icons.chevron_right,
+                      color: Colors.red.shade300,
+                      size: 20,
+                    ),
+                  ],
+                ),
+              ),
             ),
-            _buildInfoRow(
-              'Account Status',
-              user?.isActive == true ? 'Active' : 'Inactive',
-            ),
-            _buildInfoRow(
-              'Member Since',
-              user?.createdAt != null
-                  ? '${user!.createdAt.day}/${user.createdAt.month}/${user.createdAt.year}'
-                  : 'Unknown',
-            ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
           ],
         ),
       ),
@@ -1157,22 +1402,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         ],
       ),
     );
-  }
-
-  // ignore: unused_element
-  void _navigateToLanguageSelection(BuildContext context) {
-    Navigator.pushNamed(context, '/language-selection').then((_) {
-      // Reload data when returning from language screen
-      _loadLocationData();
-    });
-  }
-
-  // ignore: unused_element
-  void _navigateToTopicsSelection(BuildContext context) {
-    Navigator.pushNamed(context, '/topics-selection').then((_) {
-      // Reload data when returning from topics screen
-      _loadLocationData();
-    });
   }
 
   String _getLocationDisplayText() {
@@ -1248,8 +1477,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             currentMandalId: _selectedMandal?.id,
             onSave: (state, district, mandal) async {
               Navigator.pop(ctx);
-              final storage = OnboardingStorage();
-              await storage.saveSelectedLocation(state, district, mandal);
+              await ref
+                  .read(authViewModelProvider)
+                  .applyManualLocation(state, district, mandal);
+              // Re-register the device so push targeting follows the new
+              // location instead of the one picked at onboarding.
+              unawaited(PushNotificationService.instance.onLocationChanged());
               _loadLocationData();
               final homeVM = ref.read(homeViewModelProvider);
               homeVM.loadLocationData().then((_) => homeVM.loadNewsData());
@@ -1297,7 +1530,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               final storage = OnboardingStorage();
               final state = await storage.getSelectedState();
               if (state != null) {
-                await storage.saveSelectedLocation(state, district, mandal);
+                await ref
+                    .read(authViewModelProvider)
+                    .applyManualLocation(state, district, mandal);
+                unawaited(PushNotificationService.instance.onLocationChanged());
               }
 
               _loadLocationData();
@@ -1350,7 +1586,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               final state = await storage.getSelectedState();
               final district = await storage.getSelectedDistrict();
               if (state != null) {
-                await storage.saveSelectedLocation(state, district, mandal);
+                await ref
+                    .read(authViewModelProvider)
+                    .applyManualLocation(state, district, mandal);
+                unawaited(PushNotificationService.instance.onLocationChanged());
               }
               _loadLocationData();
               final homeVM = ref.read(homeViewModelProvider);
@@ -1745,7 +1984,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Version 1.0.0'),
+              Text('Version ${AppConstants.appVersion}'),
               const SizedBox(height: 8),
               Text(
                 'Stay updated with the latest news from around the world. Deep Pulse News brings you breaking news, trending stories, and personalized content.',
@@ -2749,6 +2988,57 @@ class _FullLocationPickerContentState
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Full-screen pinch-zoomable viewer for the profile photo. Tap the X to
+/// dismiss; pinch to zoom; drag to pan when zoomed in. We deliberately do
+/// NOT use Hero here — animating a circular-clipped 1:1 avatar into a 9:16
+/// portrait was producing a mid-flight layout glitch (the image landed at
+/// the bottom half of the screen).
+class _FullScreenPhotoViewer extends StatelessWidget {
+  final String imageUrl;
+  const _FullScreenPhotoViewer({required this.imageUrl});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: const SizedBox.shrink(),
+        actions: [
+          IconButton(
+            onPressed: () => Navigator.of(context).pop(),
+            icon: const Icon(Icons.close, color: Colors.white, size: 28),
+          ),
+        ],
+      ),
+      body: InteractiveViewer(
+        minScale: 1,
+        maxScale: 4,
+        child: SizedBox.expand(
+          child: CachedImageWidget(
+            imageUrl: imageUrl,
+            fit: BoxFit.contain,
+            placeholder: const Center(
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+            ),
+            errorWidget: const Center(
+              child: Icon(
+                Icons.broken_image_outlined,
+                color: Colors.white54,
+                size: 64,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -9,9 +9,11 @@ import '../../core/constants/app_font_sizes.dart';
 import '../../data/models/district.dart';
 import '../../data/models/mandal.dart';
 import '../../data/models/user.dart';
+import '../../enums/user_role.dart';
 import '../../extensions/user_extensions.dart';
 import '../../providers/app_providers.dart';
 import '../../shared/widgets/searchable_dropdown.dart';
+import '../../shared/widgets/app_loader.dart';
 
 class AdminUserManagementScreen extends ConsumerStatefulWidget {
   const AdminUserManagementScreen({super.key});
@@ -244,7 +246,7 @@ class _AdminUserManagementScreenState
 
                 // Role Dropdown with static IDs
                 if (controller.isLoadingRoles)
-                  const Center(child: CircularProgressIndicator())
+                  const InlineLoader(message: 'Loading roles...')
                 else if (controller.rolesError != null)
                   Text('Error loading roles: ${controller.rolesError}')
                 else
@@ -441,8 +443,12 @@ class _AdminUserManagementScreenState
     // Subadmin: State only
     // Dist-reporter: State + District
     // Reporter/Reader: State + District + Mandal
-    final showDistrict = roleSlug != 'subadmin';
-    final showMandal = roleSlug != 'subadmin' && roleSlug != 'dist-reporter';
+    // roleSlug comes from the API's role list, so resolve it through UserRole
+    // instead of matching the slug text — the backend renames these.
+    final pickedRole = UserRole.fromApiSlug(roleSlug);
+    final showDistrict = pickedRole != UserRole.subAdmin;
+    final showMandal =
+        pickedRole != UserRole.subAdmin && pickedRole != UserRole.distReporter;
 
     // Load states if not already loaded
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -595,7 +601,7 @@ class _AdminUserManagementScreenState
     final controller = ref.watch(adminUserManagementControllerProvider);
     final roleSlug =
         controller.selectedRoleSlug ?? controller.selectedRoleName ?? '';
-    final showMandal = roleSlug != 'dist-reporter';
+    final showMandal = UserRole.fromApiSlug(roleSlug) != UserRole.distReporter;
 
     // Load districts if not already loaded for this state
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -750,7 +756,7 @@ class _AdminUserManagementScreenState
         const SizedBox(height: 16),
         // Mandal Selector within district
         if (locationViewModel.isLoadingMandals) ...[
-          const CircularProgressIndicator(),
+          const InlineLoader(),
         ] else if (locationViewModel.mandalsError != null) ...[
           Text('Error loading mandals: ${locationViewModel.mandalsError}'),
         ] else ...[

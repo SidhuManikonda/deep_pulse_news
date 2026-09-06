@@ -9,29 +9,15 @@ extension UserRoleExtension on User {
       return UserRole.reader;
     }
 
-    // Check for admin role first (highest priority)
-    if (hasRoleSlug('admin')) {
-      return UserRole.admin;
+    // Highest role wins when a user carries several. Matching goes through
+    // UserRole.apiSlugs, which knows every slug the backend has used for each
+    // role — so a backend rename (e.g. `dist-reporter` → `newsdesk`) can't
+    // silently drop someone to Reader.
+    for (final role in UserRole.values.toList()
+      ..sort((a, b) => b.level.compareTo(a.level))) {
+      if (role.apiSlugs.any(hasRoleSlug)) return role;
     }
 
-    // Check for sub-admin role
-    if (hasRoleSlug('sub_admin') ||
-        hasRoleSlug('sub-admin') ||
-        hasRoleSlug('subadmin')) {
-      return UserRole.subAdmin;
-    }
-
-    // Check for dist-reporter role
-    if (hasRoleSlug('dist-reporter')) {
-      return UserRole.distReporter;
-    }
-
-    // Check for reporter role
-    if (hasRoleSlug('reporter')) {
-      return UserRole.reporter;
-    }
-
-    // Default to reader
     return UserRole.reader;
   }
 

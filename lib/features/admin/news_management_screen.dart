@@ -1,17 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_font_sizes.dart';
-import '../../data/models/district.dart';
-import '../../data/models/mandal.dart';
 import '../../data/models/news.dart';
+import '../../data/models/paginated_response.dart';
 import '../../data/models/state.dart' as location_models;
 import '../../data/models/user.dart';
 import '../../data/repositories/news_repository.dart';
+import '../../data/repositories/notification_repository.dart';
 import '../../extensions/user_extensions.dart';
 import '../../providers/app_providers.dart';
 import '../../shared/widgets/cached_image_widget.dart';
+import '../../shared/widgets/app_loader.dart';
 import '../news/news_detail_screen_v2.dart';
 import '../news/news_upload_screen.dart';
 
@@ -37,14 +40,33 @@ class _NewsManagementScreenState extends ConsumerState<NewsManagementScreen>
   String? _error;
   final _searchController = TextEditingController();
   String _searchQuery = '';
+
+  /// Whole-dataset totals from the backend. Null until the API starts sending
+  /// the `counts` block, at which point the tab badges switch over on their
+  /// own — no release coordination needed.
+  NewsStatusCounts? _counts;
+
+  /// Debounce for server-side search, so typing doesn't fire a request per
+  /// keystroke.
+  Timer? _searchDebounce;
   DateTimeRange? _dateRange;
   int? _selectedStateId;
-  int? _selectedDistrictId;
-  int? _selectedMandalId;
   location_models.State? _selectedStateObj;
-  District? _selectedDistrictObj;
-  Mandal? _selectedMandalObj;
+
+  // Districts and mandals are multi-select: an admin or sub-admin managing a
+  // whole state usually wants several districts at once, not one at a time.
+  // Empty set == no filter ("All Districts" / "All Mandals").
+  final Set<int> _selectedDistrictIds = {};
+  final Set<int> _selectedMandalIds = {};
+
+  // Topic ("type") filter — multi-select like the location filters, since a
+  // news item can be tagged to several topics at once.
+  final Set<int> _selectedTopicIds = {};
+
+  /// Author filter. The name drives the chip label; the id is what the server
+  /// filters on. Both move together — see [_selectAuthor].
   String? _selectedAuthor;
+  int? _selectedAuthorId;
 
   static const _statuses = [
     'all',
@@ -66,25 +88,19 @@ class _NewsManagementScreenState extends ConsumerState<NewsManagementScreen>
     super.initState();
     _tabController = TabController(length: _statuses.length, vsync: this);
     _scope = _NewsScope.forUser(ref.read(authViewModelProvider).user);
+    // No location prefetch needed: every filter list is derived from the loaded
+    // news itself, which already carries each article's state/district/mandal
+    // names. That also means the district filter is never empty just because a
+    // separate location fetch hadn't finished.
     _loadNews();
+    // The Author filter is the exception — it lists every user, not just the
+    // authors of the news pages loaded so far, so its options don't keep
+    // growing as you scroll. getUserList() is unpaginated, so one call covers
+    // it.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final locationVM = ref.read(locationViewModelProvider);
-      if (_scope.showStateFilter &&
-          locationVM.states.isEmpty &&
-          !locationVM.isLoadingStates) {
-        locationVM.loadStates();
-      }
-      // Sub-admin: auto-load districts for their state
-      if (_scope.showDistrictFilter &&
-          _scope.scopeStateId != null &&
-          !_scope.showStateFilter) {
-        locationVM.loadDistricts(_scope.scopeStateId!);
-      }
-      // Dist-reporter: auto-load mandals for their district
-      if (_scope.showMandalFilter &&
-          _scope.scopeDistrictId != null &&
-          !_scope.showDistrictFilter) {
-        locationVM.loadMandals(_scope.scopeDistrictId!);
+      final userCtrl = ref.read(adminUserManagementControllerProvider);
+      if (userCtrl.users.isEmpty && !userCtrl.isLoadingUsers) {
+        userCtrl.fetchUsers(authRepository: ref.read(authRepositoryProvider));
       }
     });
   }
@@ -93,6 +109,7 @@ class _NewsManagementScreenState extends ConsumerState<NewsManagementScreen>
   void dispose() {
     _tabController.dispose();
     _searchController.dispose();
+    _searchDebounce?.cancel();
     super.dispose();
   }
 
@@ -106,7 +123,10 @@ class _NewsManagementScreenState extends ConsumerState<NewsManagementScreen>
 
     try {
       final userId = ref.read(authViewModelProvider).user?.id.toString();
-      final response = await _newsRepo.getNews(userId: userId);
+      final response = await _newsRepo.getNews(
+        userId: userId,
+        authorId: _selectedAuthorId,
+      );
       final scopedNews = _scope.applyScope(response.data);
       scopedNews.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       if (mounted) {
@@ -114,6 +134,7 @@ class _NewsManagementScreenState extends ConsumerState<NewsManagementScreen>
           _allNews = scopedNews;
           _nextCursor = response.nextCursor;
           _hasMore = response.hasMore;
+          _counts = response.counts ?? _counts;
           _isLoading = false;
         });
       }
@@ -139,6 +160,7 @@ class _NewsManagementScreenState extends ConsumerState<NewsManagementScreen>
       final response = await _newsRepo.getNews(
         userId: userId,
         cursor: _nextCursor,
+        authorId: _selectedAuthorId,
       );
       final scopedNews = _scope.applyScope(response.data);
 
@@ -164,6 +186,87 @@ class _NewsManagementScreenState extends ConsumerState<NewsManagementScreen>
       }
     }
   }
+
+  /// Applies (or clears) the author filter and refetches.
+  ///
+  /// This one goes to the server rather than filtering locally: the dropdown
+  /// lists every user, but the app only holds a few pages of news, so a local
+  /// match would show "no results" for any reporter whose articles hadn't been
+  /// scrolled to yet. `?author_id=` narrows across the whole dataset.
+  void _selectAuthor({int? id, String? name}) {
+    setState(() {
+      _selectedAuthorId = id;
+      _selectedAuthor = name;
+    });
+    _loadNews();
+  }
+
+  /// Filters the loaded list immediately so typing stays responsive, then
+  /// asks the server for more matches once typing pauses.
+  void _onSearchChanged(String value) {
+    setState(() => _searchQuery = value);
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 450), () {
+      if (mounted) _runServerSearch(value);
+    });
+  }
+
+  /// Pulls server-side matches for [query] and **merges** them into the pool.
+  ///
+  /// Merging rather than replacing is the important part. The backend's search
+  /// may well only look at titles, so replacing the list would make searching
+  /// by reporter name return nothing — the local filter matches title OR
+  /// author, but only over articles it actually has. Adding to the pool means
+  /// the server broadens the search without ever taking away a match the app
+  /// could already see.
+  ///
+  /// Keeps off `_nextCursor`, which belongs to the unfiltered listing; a
+  /// search-scoped cursor would corrupt normal scroll pagination.
+  Future<void> _runServerSearch(String query) async {
+    if (query.trim().isEmpty) return;
+
+    try {
+      final userId = ref.read(authViewModelProvider).user?.id.toString();
+      final response = await _newsRepo.getNews(userId: userId, search: query);
+      if (!mounted || _searchQuery != query) return; // typing moved on
+
+      final scoped = _scope.applyScope(response.data);
+      final existingIds = _allNews.map((n) => n.id).toSet();
+      final fresh = scoped.where((n) => !existingIds.contains(n.id)).toList();
+      if (fresh.isEmpty) return;
+
+      setState(() {
+        _allNews.addAll(fresh);
+        _allNews.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      });
+    } catch (_) {
+      // Silent: the local filter still shows whatever already matched.
+    }
+  }
+
+  /// Badge number for a status tab.
+  ///
+  /// Prefers the backend's whole-dataset totals when the response carries them
+  /// — the local count only ever reflects the pages downloaded so far, so it
+  /// read "20" against 1,484 real articles. Falls back to the local count on
+  /// the older response shape, and whenever a filter is active, since the
+  /// server totals don't know about the district/topic/date narrowing applied
+  /// on top.
+  int _tabCount(String status) {
+    final serverCount = _hasLocalFilters ? null : _counts?.forStatus(status);
+    return serverCount ?? _filteredNews(status).length;
+  }
+
+  /// True when something is narrowing the list beyond plain status, which
+  /// makes the server's overall totals the wrong number to show.
+  bool get _hasLocalFilters =>
+      _searchQuery.trim().isNotEmpty ||
+      _dateRange != null ||
+      _selectedStateId != null ||
+      _selectedDistrictIds.isNotEmpty ||
+      _selectedMandalIds.isNotEmpty ||
+      _selectedTopicIds.isNotEmpty ||
+      _selectedAuthor != null;
 
   List<News> _filteredNews(String status) {
     var list = status == 'all'
@@ -202,15 +305,23 @@ class _NewsManagementScreenState extends ConsumerState<NewsManagementScreen>
     if (_selectedStateId != null) {
       list = list.where((n) => n.hasStateId(_selectedStateId!)).toList();
     }
-    if (_selectedDistrictId != null) {
-      list = list.where((n) => n.hasDistrictId(_selectedDistrictId!)).toList();
+    // Multi-select: an article matches if it's tagged to ANY selected district
+    // (or mandal), so picking three districts widens the view rather than
+    // narrowing it to their intersection.
+    if (_selectedDistrictIds.isNotEmpty) {
+      list = list
+          .where((n) => _selectedDistrictIds.any(n.hasDistrictId))
+          .toList();
     }
-    if (_selectedMandalId != null) {
-      list = list.where((n) => n.hasMandalId(_selectedMandalId!)).toList();
+    if (_selectedMandalIds.isNotEmpty) {
+      list = list.where((n) => _selectedMandalIds.any(n.hasMandalId)).toList();
     }
-    if (_selectedAuthor != null) {
-      list = list.where((n) => n.authorName == _selectedAuthor).toList();
+    if (_selectedTopicIds.isNotEmpty) {
+      list = list.where((n) => _selectedTopicIds.any(n.hasTopicId)).toList();
     }
+    // No author filtering here: the server already returned only this
+    // reporter's articles via ?author_id=. Re-filtering locally on the display
+    // name would just risk dropping rows whose name spacing differs.
     return list;
   }
 
@@ -227,12 +338,13 @@ class _NewsManagementScreenState extends ConsumerState<NewsManagementScreen>
     setState(() {
       _selectedStateId = null;
       _selectedStateObj = null;
-      _selectedDistrictId = null;
-      _selectedDistrictObj = null;
-      _selectedMandalId = null;
-      _selectedMandalObj = null;
+      _selectedDistrictIds.clear();
+      _selectedMandalIds.clear();
+      _selectedTopicIds.clear();
       _selectedAuthor = null;
+      _selectedAuthorId = null;
     });
+    _loadNews();
   }
 
   Future<void> _pickDateRange(ThemeData theme) async {
@@ -259,6 +371,25 @@ class _NewsManagementScreenState extends ConsumerState<NewsManagementScreen>
     try {
       final success = await _newsRepo.updateNewsStatus(news.id, newStatus);
       if (success) {
+        // DISABLED 2026-08-01 at backend's request — they are moving the push
+        // trigger server-side (fires automatically when status becomes
+        // `published`), so the app must not call /api/send-notification.
+        // Kept, not deleted: re-enable only if that plan is dropped.
+        //
+        // Readers are only notified when an article actually goes live.
+        // Reject / Unpublish / Restore move it *away* from published, so
+        // pushing there would advertise content nobody can open — and the
+        // reporter-facing `news_approved` / `news_rejected` waves are the
+        // backend's job (see docs/PUSH_NOTIFICATIONS_BACKEND.md §3 Step 4).
+        //
+        // if (newStatus == 'published' && news.status != 'published') {
+        //   unawaited(_fireNewsPushNotification(news));
+        // } else {
+        //   debugPrint(
+        //     '[NewsMgmt] Skipping reader push — ${news.status} → $newStatus '
+        //     '(not a publish transition)',
+        //   );
+        // }
         await _loadNews();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -281,6 +412,75 @@ class _NewsManagementScreenState extends ConsumerState<NewsManagementScreen>
         ).showSnackBar(SnackBar(content: Text('Failed: $e')));
       }
     }
+  }
+
+  /// Fires `/api/send-notification` when an admin flips a news article to
+  /// `published` from the management screen (Approve / Restore flow). Mirrors
+  /// the trigger in news_upload_screen so backend logs look identical
+  /// regardless of which entry point published the article.
+  ///
+  /// Currently unused — the call site in [_updateStatus] is commented out
+  /// because the backend now owns the publish trigger.
+  // ignore: unused_element
+  Future<void> _fireNewsPushNotification(News news) async {
+    final title = news.translations.isNotEmpty
+        ? news.translations.first.title.trim()
+        : '';
+    final body = news.translations.isNotEmpty
+        ? news.translations.first.shortDescription.trim()
+        : '';
+    final user = ref.read(authViewModelProvider).user;
+    final stateIds = news.stateLocations.map((l) => l.id).toList();
+    final districtIds = news.districtLocations.map((l) => l.id).toList();
+    final mandalIds = news.mandalLocations.map((l) => l.id).toList();
+
+    debugPrint('═════════════════════════════════════════════════════');
+    debugPrint(
+      '[NewsMgmt] 🔔 Firing push notification trigger (status change)',
+    );
+    debugPrint('[NewsMgmt]   news_id     = ${news.id}');
+    debugPrint('[NewsMgmt]   title       = $title');
+    debugPrint('[NewsMgmt]   body length = ${body.length}');
+    debugPrint(
+      '[NewsMgmt]   approver    = ${user?.name} '
+      '(role=${user?.primaryRole.value}, id=${user?.id})',
+    );
+    debugPrint('[NewsMgmt]   state_ids   = $stateIds');
+    debugPrint('[NewsMgmt]   district_ids= $districtIds');
+    debugPrint('[NewsMgmt]   mandal_ids  = $mandalIds');
+    debugPrint('[NewsMgmt]   target      = all');
+    debugPrint('═════════════════════════════════════════════════════');
+
+    try {
+      final result = await NotificationRepositoryImpl().sendNotification(
+        title: title.isEmpty ? 'New News Posted' : title,
+        body: body.isEmpty ? 'Check out the latest update' : body,
+        target: NotificationTarget.all,
+        // Audience filters — top level, not inside `data`.
+        stateIds: stateIds,
+        districtIds: districtIds,
+        mandalIds: mandalIds,
+        // Payload the device receives; `news_id` is what lets a tap open
+        // the article.
+        data: {'type': 'news_published', 'news_id': news.id.toString()},
+      );
+
+      if (result == null) {
+        debugPrint(
+          '[NewsMgmt] ❌ sendNotification returned null '
+          '(likely 4xx/5xx from backend — check API logs)',
+        );
+      } else {
+        debugPrint(
+          '[NewsMgmt] ✅ sendNotification result: '
+          'success=${result.successCount}, '
+          'failure=${result.failureCount}',
+        );
+      }
+    } catch (e, st) {
+      debugPrint('[NewsMgmt] ❌ sendNotification threw: $e\n$st');
+    }
+    debugPrint('═════════════════════════════════════════════════════');
   }
 
   Color _statusColor(String status) {
@@ -335,7 +535,7 @@ class _NewsManagementScreenState extends ConsumerState<NewsManagementScreen>
             fontWeight: FontWeight.w600,
           ),
           tabs: List.generate(_statuses.length, (i) {
-            final count = _filteredNews(_statuses[i]).length;
+            final count = _tabCount(_statuses[i]);
             return Tab(
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -378,7 +578,7 @@ class _NewsManagementScreenState extends ConsumerState<NewsManagementScreen>
                 Expanded(
                   child: TextField(
                     controller: _searchController,
-                    onChanged: (v) => setState(() => _searchQuery = v),
+                    onChanged: _onSearchChanged,
                     style: TextStyle(fontSize: scaledFontSize(14)),
                     decoration: InputDecoration(
                       hintText: 'Search by title or author...',
@@ -401,7 +601,7 @@ class _NewsManagementScreenState extends ConsumerState<NewsManagementScreen>
                               ),
                               onPressed: () {
                                 _searchController.clear();
-                                setState(() => _searchQuery = '');
+                                _onSearchChanged('');
                               },
                             ),
                       border: InputBorder.none,
@@ -511,72 +711,97 @@ class _NewsManagementScreenState extends ConsumerState<NewsManagementScreen>
                 }
                 availableStates.sort((a, b) => a.name.compareTo(b.name));
 
-                // Districts: use location VM (already loaded for the selected state)
-                // and intersect with districts that appear in the news
-                final locationVM = ref.watch(locationViewModelProvider);
+                // Districts and mandals come straight off the news items, which
+                // already carry `{id, value}` for every location they're tagged
+                // to. Deriving them here (rather than from the location VM,
+                // which only ever holds ONE district's mandals) is what lets
+                // several districts be selected at once and still show the
+                // union of their mandals.
                 final newsAfterState = _selectedStateId != null
                     ? newsForFiltering
                           .where((n) => n.hasStateId(_selectedStateId!))
                           .toList()
                     : newsForFiltering;
 
-                // Get district IDs that actually appear in filtered news
-                final newsDistrictIds = <int>{};
+                final availableDistricts = <_FilterItem>[];
+                final districtIdsSeen = <int>{};
                 for (final n in newsAfterState) {
                   for (final loc in n.districtLocations) {
-                    newsDistrictIds.add(loc.id);
+                    if (districtIdsSeen.add(loc.id)) {
+                      availableDistricts.add(_FilterItem(loc.id, loc.value));
+                    }
                   }
                 }
-                // Only show districts from the VM that are in the news
-                final availableDistricts = locationVM.districts
-                    .where((d) => newsDistrictIds.contains(d.id))
-                    .map((d) => _FilterItem(d.id, d.name))
-                    .toList();
+                availableDistricts.sort((a, b) => a.name.compareTo(b.name));
 
-                // Mandals: same approach
-                final newsAfterDistrict = _selectedDistrictId != null
+                // Mandals: union across every selected district.
+                final newsAfterDistrict = _selectedDistrictIds.isNotEmpty
                     ? newsAfterState
-                          .where((n) => n.hasDistrictId(_selectedDistrictId!))
+                          .where(
+                            (n) => _selectedDistrictIds.any(n.hasDistrictId),
+                          )
                           .toList()
                     : newsAfterState;
-                final newsMandalIds = <int>{};
+
+                final availableMandals = <_FilterItem>[];
+                final mandalIdsSeen = <int>{};
                 for (final n in newsAfterDistrict) {
                   for (final loc in n.mandalLocations) {
-                    newsMandalIds.add(loc.id);
+                    if (mandalIdsSeen.add(loc.id)) {
+                      availableMandals.add(_FilterItem(loc.id, loc.value));
+                    }
                   }
                 }
-                final availableMandals = locationVM.mandals
-                    .where((m) => newsMandalIds.contains(m.id))
-                    .map((m) => _FilterItem(m.id, m.name))
-                    .toList();
+                availableMandals.sort((a, b) => a.name.compareTo(b.name));
 
-                // Authors available based on current location filters
-                final newsAfterMandal = _selectedMandalId != null
-                    ? newsAfterDistrict
-                          .where((n) => n.hasMandalId(_selectedMandalId!))
-                          .toList()
-                    : newsAfterDistrict;
-                final authors =
-                    newsAfterMandal
-                        .map((n) => n.authorName)
-                        .where((a) => a != null && a.isNotEmpty)
-                        .cast<String>()
-                        .toSet()
+                // Topics ("type") available in the loaded news. Derived the
+                // same way as the location filters, since news items carry
+                // their topics in the very same `locations` list.
+                final availableTopics = <_FilterItem>[];
+                final topicIdsSeen = <int>{};
+                for (final n in newsForFiltering) {
+                  for (final loc in n.topicLocations) {
+                    if (topicIdsSeen.add(loc.id)) {
+                      availableTopics.add(_FilterItem(loc.id, loc.value));
+                    }
+                  }
+                }
+                availableTopics.sort((a, b) => a.name.compareTo(b.name));
+
+                // Author options come from the full user list, so every user is
+                // selectable regardless of how many news pages have loaded.
+                // Sub-admins / dist-reporters only see users in their own
+                // state, matching how the rest of this screen is scoped.
+                final userCtrl = ref.watch(
+                  adminUserManagementControllerProvider,
+                );
+                final scopedUsers = _scope.showStateFilter
+                    ? userCtrl.users
+                    : userCtrl.users
+                          .where(
+                            (u) =>
+                                _scope.scopeStateId == null ||
+                                u.stateId == _scope.scopeStateId,
+                          )
+                          .toList();
+                final userNames =
+                    scopedUsers
+                        .where((u) => u.name.trim().isNotEmpty)
+                        .map((u) => _FilterItem(u.id, u.name.trim()))
                         .toList()
-                      ..sort();
-
-                // Role names from news authors
-                final authorRoles = newsAfterMandal
-                    .map((n) => n.authorName)
-                    .where((a) => a != null)
-                    .cast<String>()
-                    .toSet()
-                    .toList();
+                      ..sort((a, b) => a.name.compareTo(b.name));
+                // Fall back to authors of loaded news until the user list
+                // arrives, so the chip is never empty on first paint.
+                // Until the user list arrives there are no ids to filter by,
+                // so the chip stays empty rather than offering names that
+                // would send author_id: null and quietly filter nothing.
+                final authors = userNames;
 
                 final hasLocationFilter =
                     _selectedStateId != null ||
-                    _selectedDistrictId != null ||
-                    _selectedMandalId != null ||
+                    _selectedDistrictIds.isNotEmpty ||
+                    _selectedMandalIds.isNotEmpty ||
+                    _selectedTopicIds.isNotEmpty ||
                     _selectedAuthor != null;
                 return Padding(
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
@@ -602,15 +827,10 @@ class _NewsManagementScreenState extends ConsumerState<NewsManagementScreen>
                                   isActive: true,
                                   createdAt: DateTime.now(),
                                 );
-                                _selectedDistrictId = null;
-                                _selectedDistrictObj = null;
-                                _selectedMandalId = null;
-                                _selectedMandalObj = null;
+                                _selectedDistrictIds.clear();
+                                _selectedMandalIds.clear();
                                 _selectedAuthor = null;
                               });
-                              ref
-                                  .read(locationViewModelProvider)
-                                  .loadDistricts(s.id);
                             },
                             onClear: _clearLocationFilters,
                             theme: theme,
@@ -619,38 +839,25 @@ class _NewsManagementScreenState extends ConsumerState<NewsManagementScreen>
                             (_selectedStateId != null ||
                                 _scope.scopeStateId != null)) ...[
                           const SizedBox(width: 8),
-                          _buildLocationChip<_FilterItem>(
-                            label:
-                                _selectedDistrictObj?.name ?? 'All Districts',
+                          _buildMultiLocationChip(
+                            label: _multiLabel(
+                              selectedIds: _selectedDistrictIds,
+                              items: availableDistricts,
+                              emptyLabel: 'All Districts',
+                              plural: 'districts',
+                            ),
                             icon: Icons.location_city_outlined,
-                            isSelected: _selectedDistrictId != null,
                             items: availableDistricts,
-                            getName: (d) => d.name,
-                            onSelected: (d) {
+                            selectedIds: _selectedDistrictIds,
+                            sheetTitle: 'Districts',
+                            onChanged: (ids) {
                               setState(() {
-                                _selectedDistrictId = d.id;
-                                _selectedDistrictObj = District(
-                                  id: d.id,
-                                  stateId: _selectedStateId ?? 0,
-                                  name: d.name,
-                                  slug: '',
-                                  isActive: true,
-                                  createdAt: DateTime.now(),
-                                );
-                                _selectedMandalId = null;
-                                _selectedMandalObj = null;
-                                _selectedAuthor = null;
-                              });
-                              ref
-                                  .read(locationViewModelProvider)
-                                  .loadMandals(d.id);
-                            },
-                            onClear: () {
-                              setState(() {
-                                _selectedDistrictId = null;
-                                _selectedDistrictObj = null;
-                                _selectedMandalId = null;
-                                _selectedMandalObj = null;
+                                _selectedDistrictIds
+                                  ..clear()
+                                  ..addAll(ids);
+                                // Mandals belong to districts, so a district
+                                // change invalidates any mandal narrowing.
+                                _selectedMandalIds.clear();
                                 _selectedAuthor = null;
                               });
                             },
@@ -658,50 +865,66 @@ class _NewsManagementScreenState extends ConsumerState<NewsManagementScreen>
                           ),
                         ],
                         if (_scope.showMandalFilter &&
-                            (_selectedDistrictId != null ||
-                                _scope.scopeDistrictId != null)) ...[
+                            _selectedDistrictIds.isNotEmpty) ...[
                           const SizedBox(width: 8),
-                          _buildLocationChip<_FilterItem>(
-                            label: _selectedMandalObj?.name ?? 'All Mandals',
+                          _buildMultiLocationChip(
+                            label: _multiLabel(
+                              selectedIds: _selectedMandalIds,
+                              items: availableMandals,
+                              emptyLabel: 'All Mandals',
+                              plural: 'mandals',
+                            ),
                             icon: Icons.place_outlined,
-                            isSelected: _selectedMandalId != null,
                             items: availableMandals,
-                            getName: (m) => m.name,
-                            onSelected: (m) {
+                            selectedIds: _selectedMandalIds,
+                            sheetTitle: 'Mandals',
+                            onChanged: (ids) {
                               setState(() {
-                                _selectedMandalId = m.id;
-                                _selectedMandalObj = Mandal(
-                                  id: m.id,
-                                  districtId: _selectedDistrictId ?? 0,
-                                  name: m.name,
-                                  slug: '',
-                                  isActive: true,
-                                  createdAt: DateTime.now(),
-                                );
-                                _selectedAuthor = null;
-                              });
-                            },
-                            onClear: () {
-                              setState(() {
-                                _selectedMandalId = null;
-                                _selectedMandalObj = null;
+                                _selectedMandalIds
+                                  ..clear()
+                                  ..addAll(ids);
                                 _selectedAuthor = null;
                               });
                             },
                             theme: theme,
                           ),
                         ],
-                        // Author filter — only shows authors with news in current location
+                        // Topic ("type") filter.
+                        if (availableTopics.isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          _buildMultiLocationChip(
+                            label: _multiLabel(
+                              selectedIds: _selectedTopicIds,
+                              items: availableTopics,
+                              emptyLabel: 'All Topics',
+                              plural: 'topics',
+                            ),
+                            icon: Icons.tag_outlined,
+                            items: availableTopics,
+                            selectedIds: _selectedTopicIds,
+                            sheetTitle: 'Topics',
+                            onChanged: (ids) {
+                              setState(() {
+                                _selectedTopicIds
+                                  ..clear()
+                                  ..addAll(ids);
+                              });
+                            },
+                            theme: theme,
+                          ),
+                        ],
+                        // Author filter — lists all users (state-scoped for
+                        // sub-admin / dist-reporter), not just loaded authors.
                         const SizedBox(width: 8),
-                        _buildLocationChip<String>(
+                        _buildLocationChip<_FilterItem>(
                           label: _selectedAuthor ?? 'Author',
                           icon: Icons.person_outline,
                           isSelected: _selectedAuthor != null,
                           items: authors,
-                          getName: (a) => a,
+                          getName: (a) => a.name,
                           onSelected: (a) =>
-                              setState(() => _selectedAuthor = a),
-                          onClear: () => setState(() => _selectedAuthor = null),
+                              _selectAuthor(id: a.id, name: a.name),
+                          onClear: () => _selectAuthor(),
                           theme: theme,
                         ),
                         if (hasLocationFilter) ...[
@@ -755,7 +978,7 @@ class _NewsManagementScreenState extends ConsumerState<NewsManagementScreen>
           // Content
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? const InlineLoader(message: 'Loading news...')
                 : _error != null
                 ? _buildErrorView(theme)
                 : TabBarView(
@@ -835,7 +1058,7 @@ class _NewsManagementScreenState extends ConsumerState<NewsManagementScreen>
             if (index >= news.length) {
               return const Padding(
                 padding: EdgeInsets.all(16.0),
-                child: Center(child: CircularProgressIndicator()),
+                child: InlineLoader(),
               );
             }
             return _buildNewsCard(news[index], theme);
@@ -1325,6 +1548,128 @@ class _NewsManagementScreenState extends ConsumerState<NewsManagementScreen>
     );
   }
 
+  /// Chip label for a multi-select filter: the name when exactly one thing is
+  /// picked, a count when several are, and the "all" placeholder when none are.
+  String _multiLabel({
+    required Set<int> selectedIds,
+    required List<_FilterItem> items,
+    required String emptyLabel,
+    required String plural,
+  }) {
+    if (selectedIds.isEmpty) return emptyLabel;
+    if (selectedIds.length == 1) {
+      final match = items.where((i) => i.id == selectedIds.first);
+      if (match.isNotEmpty) return match.first.name;
+    }
+    return '${selectedIds.length} $plural';
+  }
+
+  /// Multi-select sibling of [_buildLocationChip]. Tapping the chip body opens
+  /// a checkbox sheet; the trailing ✕ (shown only while something is picked)
+  /// clears the filter without opening anything.
+  Widget _buildMultiLocationChip({
+    required String label,
+    required IconData icon,
+    required List<_FilterItem> items,
+    required Set<int> selectedIds,
+    required String sheetTitle,
+    required ValueChanged<Set<int>> onChanged,
+    required ThemeData theme,
+  }) {
+    final hasSelection = selectedIds.isNotEmpty;
+
+    void openSheet() {
+      if (items.isEmpty) return;
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: Colors.white,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        isScrollControlled: true,
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.7,
+        ),
+        builder: (ctx) => _MultiSelectSheet(
+          title: sheetTitle,
+          icon: icon,
+          items: items,
+          initialSelectedIds: selectedIds,
+          onChanged: onChanged,
+          theme: theme,
+        ),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: hasSelection ? theme.appPrimary.withOpacity(0.1) : Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: theme.dividerColor.withOpacity(0.2)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          GestureDetector(
+            onTap: openSheet,
+            child: Padding(
+              padding: const EdgeInsets.only(
+                left: 12,
+                right: 4,
+                top: 8,
+                bottom: 8,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    icon,
+                    size: 14,
+                    color: hasSelection ? theme.appPrimary : theme.appTextLight,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: scaledFontSize(12),
+                      fontWeight: FontWeight.w600,
+                      color: hasSelection
+                          ? theme.appPrimary
+                          : theme.appTextSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          GestureDetector(
+            onTap: hasSelection ? () => onChanged(const {}) : openSheet,
+            child: Padding(
+              padding: const EdgeInsets.only(
+                left: 2,
+                right: 10,
+                top: 8,
+                bottom: 8,
+              ),
+              child: Icon(
+                hasSelection ? Icons.close : Icons.keyboard_arrow_down,
+                size: 16,
+                color: hasSelection ? theme.appPrimary : theme.appTextLight,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildActionButton({
     required IconData icon,
     required String label,
@@ -1489,6 +1834,206 @@ class _LocationSearchSheetState<T> extends State<_LocationSearchSheet<T>> {
   }
 }
 
+/// Checkbox picker for the multi-select location filters. Applies each toggle
+/// immediately via [onChanged] so the list behind the sheet updates live, and
+/// offers a select-all/clear shortcut scoped to whatever the search matches —
+/// searching "God" then tapping Select all picks only the Godavari districts.
+class _MultiSelectSheet extends StatefulWidget {
+  final String title;
+  final IconData icon;
+  final List<_FilterItem> items;
+  final Set<int> initialSelectedIds;
+  final ValueChanged<Set<int>> onChanged;
+  final ThemeData theme;
+
+  const _MultiSelectSheet({
+    required this.title,
+    required this.icon,
+    required this.items,
+    required this.initialSelectedIds,
+    required this.onChanged,
+    required this.theme,
+  });
+
+  @override
+  State<_MultiSelectSheet> createState() => _MultiSelectSheetState();
+}
+
+class _MultiSelectSheetState extends State<_MultiSelectSheet> {
+  late final Set<int> _selected = {...widget.initialSelectedIds};
+  String _query = '';
+
+  List<_FilterItem> get _filtered {
+    if (_query.isEmpty) return widget.items;
+    final q = _query.toLowerCase();
+    return widget.items
+        .where((item) => item.name.toLowerCase().contains(q))
+        .toList();
+  }
+
+  void _apply() => widget.onChanged({..._selected});
+
+  void _toggle(int id) {
+    setState(() {
+      if (!_selected.remove(id)) _selected.add(id);
+    });
+    _apply();
+  }
+
+  void _toggleAllFiltered() {
+    final filteredIds = _filtered.map((i) => i.id).toList();
+    final allPicked = filteredIds.every(_selected.contains);
+    setState(() {
+      if (allPicked) {
+        _selected.removeAll(filteredIds);
+      } else {
+        _selected.addAll(filteredIds);
+      }
+    });
+    _apply();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = widget.theme;
+    final filtered = _filtered;
+    final allPicked =
+        filtered.isNotEmpty && filtered.every((i) => _selected.contains(i.id));
+
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 12, 8),
+            child: Row(
+              children: [
+                Icon(widget.icon, size: 20, color: theme.appPrimary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Select ${widget.title}',
+                    style: TextStyle(
+                      fontSize: scaledFontSize(16),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                if (filtered.isNotEmpty)
+                  TextButton(
+                    onPressed: _toggleAllFiltered,
+                    child: Text(
+                      allPicked ? 'Clear all' : 'Select all',
+                      style: TextStyle(
+                        fontSize: scaledFontSize(13),
+                        fontWeight: FontWeight.w600,
+                        color: theme.appPrimary,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: TextField(
+              onChanged: (v) => setState(() => _query = v),
+              style: TextStyle(fontSize: scaledFontSize(14)),
+              decoration: InputDecoration(
+                hintText: 'Search...',
+                hintStyle: TextStyle(
+                  color: theme.appTextLight,
+                  fontSize: scaledFontSize(14),
+                ),
+                prefixIcon: Icon(
+                  Icons.search,
+                  color: theme.appTextLight,
+                  size: 20,
+                ),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+              ),
+            ),
+          ),
+          const Divider(height: 1),
+          Flexible(
+            child: filtered.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(
+                      'No results found',
+                      style: TextStyle(
+                        fontSize: scaledFontSize(14),
+                        color: theme.appTextLight,
+                      ),
+                    ),
+                  )
+                : ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: filtered.length,
+                    itemBuilder: (_, i) {
+                      final item = filtered[i];
+                      final picked = _selected.contains(item.id);
+                      return CheckboxListTile(
+                        dense: true,
+                        value: picked,
+                        activeColor: theme.appPrimary,
+                        controlAffinity: ListTileControlAffinity.trailing,
+                        title: Text(
+                          item.name,
+                          style: TextStyle(
+                            fontSize: scaledFontSize(14),
+                            fontWeight: picked
+                                ? FontWeight.w600
+                                : FontWeight.w400,
+                          ),
+                        ),
+                        onChanged: (_) => _toggle(item.id),
+                      );
+                    },
+                  ),
+          ),
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: theme.appPrimary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: Text(
+                    _selected.isEmpty
+                        ? 'Done'
+                        : 'Done · ${_selected.length} selected',
+                    style: TextStyle(
+                      fontSize: scaledFontSize(14),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Determines what news the current user can see & manage.
 class _NewsScope {
   final bool canApproveReject;
@@ -1496,8 +2041,6 @@ class _NewsScope {
   final bool showDistrictFilter;
   final bool showMandalFilter;
   final int? scopeStateId;
-  final int? scopeDistrictId;
-  final int? scopeMandalId;
 
   const _NewsScope({
     required this.canApproveReject,
@@ -1505,8 +2048,6 @@ class _NewsScope {
     this.showDistrictFilter = false,
     this.showMandalFilter = false,
     this.scopeStateId,
-    this.scopeDistrictId,
-    this.scopeMandalId,
   });
 
   factory _NewsScope.forUser(User? user) {
@@ -1523,19 +2064,17 @@ class _NewsScope {
           showDistrictFilter: true,
           showMandalFilter: true,
         );
+      // Dist-reporters manage the same pool as sub-admins — every district
+      // and mandal in their state, not just their own district. The two roles
+      // only diverge outside this screen: sub-admins additionally get User
+      // Management, which dist-reporters don't see (see profile_screen).
       case 'sub_admin':
+      case 'dist-reporter':
         return _NewsScope(
           canApproveReject: true,
           showDistrictFilter: true,
           showMandalFilter: true,
           scopeStateId: user.stateId,
-        );
-      case 'dist-reporter':
-        return _NewsScope(
-          canApproveReject: true,
-          showMandalFilter: true,
-          scopeStateId: user.stateId,
-          scopeDistrictId: user.districtId,
         );
       default:
         return const _NewsScope(canApproveReject: false);
@@ -1548,12 +2087,6 @@ class _NewsScope {
 
     if (scopeStateId != null) {
       list = list.where((n) => n.hasStateId(scopeStateId!)).toList();
-    }
-    if (scopeDistrictId != null) {
-      list = list.where((n) => n.hasDistrictId(scopeDistrictId!)).toList();
-    }
-    if (scopeMandalId != null) {
-      list = list.where((n) => n.hasMandalId(scopeMandalId!)).toList();
     }
 
     return list;

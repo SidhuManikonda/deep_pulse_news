@@ -1,22 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../data/models/state.dart' as location_models;
-import '../../providers/app_providers.dart';
-import '../../shared/widgets/shimmer_widget.dart';
+
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_font_sizes.dart';
+import '../../core/constants/app_spacing.dart';
+import '../../core/constants/app_radius.dart';
+import '../../data/models/state.dart' as location_models;
 import '../../features/onboarding/location_view_model.dart';
+import '../../providers/app_providers.dart';
 import 'district_selection_screen.dart';
+import 'onboarding_widgets.dart';
 
 class StateSelectionScreen extends ConsumerStatefulWidget {
   const StateSelectionScreen({super.key});
 
   @override
-  ConsumerState<StateSelectionScreen> createState() =>
-      _StateSelectionScreenState();
+  ConsumerState<StateSelectionScreen> createState() => _StateSelectionScreenState();
 }
 
 class _StateSelectionScreenState extends ConsumerState<StateSelectionScreen> {
+  String _query = '';
+
   @override
   void initState() {
     super.initState();
@@ -27,202 +31,108 @@ class _StateSelectionScreenState extends ConsumerState<StateSelectionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final locationViewModel = ref.watch(locationViewModelProvider);
+    final vm = ref.watch(locationViewModelProvider);
+    final theme = Theme.of(context);
+
+    final filtered = _query.isEmpty
+        ? vm.states
+        : vm.states
+            .where((s) => s.name.toLowerCase().contains(_query.toLowerCase()))
+            .toList();
 
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: Text(
-          'Select State',
-          style: TextStyle(
-            fontSize: appFontSizeTitle,
-            fontWeight: FontWeight.w600,
-            color: Theme.of(context).textTheme.headlineLarge?.color,
-          ),
-        ),
-        centerTitle: true,
-        leading: IconButton(
-          icon: Icon(
-            Icons.arrow_back,
-            color: Theme.of(context).textTheme.bodyLarge?.color,
-          ),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
+      backgroundColor: Colors.white,
       body: SafeArea(
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Header section
+            // ── Header ───────────────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.sm, AppSpacing.sm, AppSpacing.lg, 0,
+              ),
+              child: Row(
                 children: [
-                  Container(
-                    width: 60,
-                    height: 60,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF2196F3),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Center(
-                      child: Icon(
-                        Icons.location_on,
-                        color: Colors.white,
-                        size: 32,
-                      ),
-                    ),
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back_rounded),
+                    color: const Color(0xFF1C1C1E),
+                    onPressed: () => Navigator.pop(context),
                   ),
-                  const SizedBox(height: 16),
+                  const Spacer(),
                   Text(
-                    'Choose your State',
+                    'Step 1 of 3',
                     style: TextStyle(
-                      fontSize: appFontSizeHeader,
-                      fontWeight: FontWeight.w600,
-                      color: Theme.of(context).textTheme.headlineMedium?.color,
+                      fontSize: scaledFontSize(13),
+                      color: theme.appTextSecondary,
+                      fontWeight: FontWeight.w500,
                     ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Select your state to get localized news content',
-                    style: TextStyle(
-                      fontSize: appFontSizeBody,
-                      color: Theme.of(context).textTheme.bodyMedium?.color,
-                    ),
-                    textAlign: TextAlign.center,
                   ),
                 ],
               ),
             ),
 
-            // States list
-            Expanded(child: _buildStatesList(locationViewModel)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatesList(LocationViewModel locationViewModel) {
-    if (locationViewModel.isLoadingStates) {
-      return _buildLoadingList();
-    }
-
-    if (locationViewModel.statesError != null) {
-      return _buildErrorWidget(
-        'Failed to load states',
-        locationViewModel.statesError!,
-        () => locationViewModel.retryLoadStates(),
-      );
-    }
-
-    if (locationViewModel.states.isEmpty) {
-      return Center(
-        child: Text(
-          'No states available',
-          style: TextStyle(fontSize: appFontSizeSubHeader, color: Colors.grey),
-        ),
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      itemCount: locationViewModel.states.length,
-      itemBuilder: (context, index) {
-        final state = locationViewModel.states[index];
-        return _buildStateItem(state);
-      },
-    );
-  }
-
-  Widget _buildStateItem(location_models.State state) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Theme.of(context).appGrey300, width: 1),
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
-        title: Text(
-          state.name,
-          style: TextStyle(
-            fontSize: appFontSizeSubHeader,
-            fontWeight: FontWeight.w500,
-            color: Theme.of(context).textTheme.bodyLarge?.color,
-          ),
-        ),
-        trailing: Icon(
-          Icons.arrow_forward_ios,
-          size: 16,
-          color: Colors.grey[600],
-        ),
-        onTap: () => _onStateSelected(state),
-      ),
-    );
-  }
-
-  Widget _buildLoadingList() {
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      itemCount: 10,
-      itemBuilder: (context, index) {
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 10.0),
-          child: ShimmerWidget(
-            width: double.infinity,
-            height: 40,
-            borderRadius: BorderRadius.circular(4),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildErrorWidget(String title, String error, VoidCallback onRetry) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.error_outline, size: 64, color: Theme.of(context).appErrorLight),
-            const SizedBox(height: 16),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: appFontSizeHeader,
-                fontWeight: FontWeight.w600,
-                color: Colors.red[700],
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm,
               ),
-              textAlign: TextAlign.center,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  LocationStepIndicator(currentStep: 1),
+                  const SizedBox(height: AppSpacing.lg),
+                  Text(
+                    'Choose your State',
+                    style: TextStyle(
+                      fontSize: scaledFontSize(22),
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF1C1C1E),
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    'We\'ll use this to show you local news',
+                    style: TextStyle(
+                      fontSize: scaledFontSize(14),
+                      color: theme.appTextSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  LocationSearchBar(
+                    hint: 'Search states...',
+                    onChanged: (v) => setState(() => _query = v),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              error,
-              style: TextStyle(
-                fontSize: appFontSizeBody,
-                color: Theme.of(context).appErrorMedium,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: onRetry,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Theme.of(context).appErrorMedium,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 32,
-                  vertical: 12,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              child: const Text('Retry'),
+
+            // ── List ─────────────────────────────────────────────────
+            Expanded(
+              child: vm.isLoadingStates
+                  ? buildLoadingList()
+                  : vm.statesError != null
+                  ? buildErrorWidget(context, vm.statesError!, vm.retryLoadStates)
+                  : filtered.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No states found',
+                        style: TextStyle(
+                          fontSize: scaledFontSize(14),
+                          color: theme.appTextSecondary,
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.lg,
+                        vertical: AppSpacing.sm,
+                      ),
+                      itemCount: filtered.length,
+                      itemBuilder: (_, i) => LocationListItem(
+                        name: filtered[i].name,
+                        onTap: () => _onTap(filtered[i]),
+                      ),
+                    ),
             ),
           ],
         ),
@@ -230,14 +140,11 @@ class _StateSelectionScreenState extends ConsumerState<StateSelectionScreen> {
     );
   }
 
-  void _onStateSelected(location_models.State state) {
-    // Set selected state in view model
+  void _onTap(location_models.State state) {
     ref.read(locationViewModelProvider).setSelectedState(state);
-
-    // Navigate to district selection screen
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => const DistrictSelectionScreen()),
+      MaterialPageRoute(builder: (_) => const DistrictSelectionScreen()),
     );
   }
 }

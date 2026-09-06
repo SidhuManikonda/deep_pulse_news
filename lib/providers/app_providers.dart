@@ -1,14 +1,16 @@
 import 'package:deep_pulse_news/features/admin/admin_user_management_controller.dart';
+import 'package:deep_pulse_news/features/admin/ads_management_controller.dart';
 import 'package:deep_pulse_news/features/admin/location_management_controller.dart';
-import 'package:flutter_riverpod/legacy.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
+import '../data/repositories/auth_repository.dart';
+import '../data/repositories/comments_repository.dart';
 import '../features/auth/auth_view_model.dart';
 import '../features/onboarding/language_view_model.dart';
 import '../features/onboarding/location_view_model.dart';
 import '../features/onboarding/topic_viewmodel.dart';
-import '../data/repositories/auth_repository.dart';
-import '../data/repositories/comments_repository.dart';
+import 'auto_play_controller.dart';
 import 'theme_controller.dart';
 
 // Language ViewModel Provider
@@ -51,6 +53,11 @@ final themeControllerProvider = ChangeNotifierProvider<ThemeController>((ref) {
   return ThemeController();
 });
 
+// Auto-play Provider — whether news videos play automatically in the feed.
+final autoPlayProvider = ChangeNotifierProvider<AutoPlayController>((ref) {
+  return AutoPlayController();
+});
+
 // Selected Topics Provider
 final selectedTopicsProvider = StateProvider<List<String>>((ref) => []);
 
@@ -74,4 +81,9 @@ final adminUserManagementControllerProvider =
 final locationManagementControllerProvider =
     ChangeNotifierProvider<LocationManagementController>((ref) {
       return LocationManagementController();
+    });
+
+final adsManagementControllerProvider =
+    ChangeNotifierProvider<AdsManagementController>((ref) {
+      return AdsManagementController();
     });

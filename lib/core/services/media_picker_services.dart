@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -49,6 +50,41 @@ class MediaPickerService {
       return images.map((x) => File(x.path)).toList();
     } catch (e) {
       throw 'Failed to pick images: $e';
+    }
+  }
+
+  /// Request audio media permission (Android 13+ READ_MEDIA_AUDIO, with a
+  /// storage fallback for Android 12 and below).
+  Future<bool> _requestAudioPermission() async {
+    if (!Platform.isAndroid) return true;
+
+    var status = await Permission.audio.status;
+    if (status.isGranted) return true;
+
+    status = await Permission.audio.request();
+    if (status.isGranted) return true;
+
+    if (status.isPermanentlyDenied || status.isDenied) {
+      final storageStatus = await Permission.storage.request();
+      if (storageStatus.isGranted) return true;
+    }
+    return false;
+  }
+
+  /// Pick a single audio file. Uses file_picker since image_picker cannot
+  /// select audio. The backend infers the media type from the uploaded file.
+  Future<File?> pickAudio() async {
+    final granted = await _requestAudioPermission();
+    if (!granted) {
+      debugPrint('Audio permission not explicitly granted, trying picker anyway');
+    }
+
+    try {
+      final result = await FilePicker.pickFiles(type: FileType.audio);
+      final path = result?.files.single.path;
+      return path != null ? File(path) : null;
+    } catch (e) {
+      throw 'Failed to pick audio: $e';
     }
   }
 

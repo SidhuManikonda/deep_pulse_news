@@ -106,7 +106,7 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
                   Text(
                     _getNewsTitle(),
                     style: TextStyle(
-                      fontSize: scaledFontSize(23),
+                      fontSize: scaledFontSize(21),
                       fontWeight: FontWeight.bold,
                       color: Theme.of(context).textTheme.headlineLarge?.color,
                       height: 1.3,
@@ -125,7 +125,7 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        _formatTimestamp(_newsItem.createdAt),
+                        _formatTimestamp(_newsItem.displayTime),
                         style: TextStyle(
                           fontSize: scaledFontSize(13),
                           color: Theme.of(context).appGrey600,
@@ -250,7 +250,7 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Text(
-                      _formatTimestamp(_newsItem.createdAt),
+                      _formatTimestamp(_newsItem.displayTime),
                       style:  TextStyle(
                         fontSize: scaledFontSize(12),
                         color: Colors.white,
@@ -390,7 +390,7 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Text(
-                    _formatTimestamp(_newsItem.createdAt),
+                    _formatTimestamp(_newsItem.displayTime),
                     style:  TextStyle(
                       fontSize: scaledFontSize(12),
                       color: Colors.white,

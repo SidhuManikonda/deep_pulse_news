@@ -8,6 +8,7 @@ import '../../providers/app_providers.dart';
 import 'comments_view_model.dart';
 import '../../core/constants/app_font_sizes.dart';
 import '../../shared/widgets/report_bottom_sheet.dart';
+import '../../shared/widgets/app_loader.dart';
 
 class CommentsScreen extends ConsumerStatefulWidget {
   final News news;
@@ -157,29 +158,7 @@ class _CommentsScreenState extends ConsumerState<CommentsScreen> {
       listenable: _viewModel,
       builder: (context, child) {
         if (_viewModel.isLoading) {
-          return Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  width: 32,
-                  height: 32,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.5,
-                    color: theme.appPrimary,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Loading comments...',
-                  style: TextStyle(
-                    fontSize: scaledFontSize(14),
-                    color: theme.appTextLight,
-                  ),
-                ),
-              ],
-            ),
-          );
+          return const InlineLoader(message: 'Loading comments...');
         }
 
         if (_viewModel.error != null) {
@@ -780,28 +759,29 @@ class _CommentsScreenState extends ConsumerState<CommentsScreen> {
                         ],
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    const Text('·', style: TextStyle(color: Color(0xFF999999))),
-                    // const SizedBox(width: 6),
-                    // // GestureDetector(
-                    // //   onTap: () => _viewModel.dislikeComment(reply),
-                    // //   child: Row(
-                    // //     mainAxisSize: MainAxisSize.min,
-                    // //     children: [
-                    // //       Icon(
-                    // //         reply.isLikedByUser == false
-                    // //             ? Icons.thumb_down
-                    // //             : Icons.thumb_down_outlined,
-                    // //         size: 16,
-                    // //         color: reply.isLikedByUser == false
-                    // //             ? Colors.orange
-                    // //             : const Color(0xFF999999),
-                    // //       ),
-                         
-                    // //     ],
-                    // //   ),
-                    // // ),
-                
+                    // Report (for others' replies)
+                    if (!isCurrentUser) ...[
+                      const SizedBox(width: 6),
+                      const Text(
+                        '·',
+                        style: TextStyle(color: Color(0xFF999999)),
+                      ),
+                      const SizedBox(width: 6),
+                      GestureDetector(
+                        onTap: () => _showCommentOptions(
+                          context,
+                          theme,
+                          reply,
+                          isCurrentUser,
+                        ),
+                        child: const Icon(
+                          Icons.flag_outlined,
+                          size: 14,
+                          color: Color(0xFF999999),
+                        ),
+                      ),
+                    ],
+
                     // Delete for own replies
                     if (isCurrentUser) ...[
                       const SizedBox(width: 6),

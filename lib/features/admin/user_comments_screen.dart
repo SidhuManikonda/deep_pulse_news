@@ -286,9 +286,9 @@ class _UserCommentsScreenState extends ConsumerState<UserCommentsScreen> {
             ),
           ),
 
-          // Footer: time + approval badge
+          // Footer: time + delete action
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
             child: Row(
               children: [
                 Icon(Icons.access_time_rounded,
@@ -303,8 +303,25 @@ class _UserCommentsScreenState extends ConsumerState<UserCommentsScreen> {
                   '· ${_formatDate(entry.comment.createdAt.toLocal())}',
                   style: TextStyle(fontSize: scaledFontSize(11), color: theme.appTextLight),
                 ),
-                // const Spacer(),
-                // _buildApprovalBadge(entry.comment.isApproved, theme),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: () => _confirmDelete(entry),
+                  icon: const Icon(Icons.delete_outline_rounded,
+                      size: 18, color: Colors.red),
+                  label: Text(
+                    'Delete',
+                    style: TextStyle(
+                      fontSize: scaledFontSize(12),
+                      fontWeight: FontWeight.w600,
+                      color: Colors.red,
+                    ),
+                  ),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: const Size(0, 32),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
               ],
             ),
           ),
@@ -366,6 +383,49 @@ class _UserCommentsScreenState extends ConsumerState<UserCommentsScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _confirmDelete(UserCommentEntry entry) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+        ),
+        title: const Text('Delete comment?'),
+        content: Text(
+          'This will permanently remove the comment:\n\n"${entry.comment.content}"',
+          style: TextStyle(fontSize: scaledFontSize(14)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final ok = await ref
+        .read(adminUserManagementControllerProvider)
+        .deleteUserComment(entry.comment.id);
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(ok ? 'Comment deleted' : 'Failed to delete comment'),
+        backgroundColor: ok ? Colors.green[600] : Colors.red[600],
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }

@@ -42,7 +42,9 @@ class AuthHelper {
     );
 
     if (shouldLogin == true) {
-      await Navigator.pushNamed(context, AppRouter.login);
+      // The legacy '/login' route is disabled — Google SSO is the only
+      // active auth path. Pushing '/login' shows "No route defined for /login".
+      await Navigator.pushNamed(context, AppRouter.gmailSso);
 
       final newAuthState = ref.read(authViewModelProvider);
       return newAuthState.isAuthenticated;

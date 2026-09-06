@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import '../../core/services/video_preloader_service.dart';
+import 'app_loader.dart';
 
 class VideoPlayerWidget extends StatefulWidget {
   final String videoUrl;
@@ -418,16 +419,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
   }
 
   Widget _buildLoadingWidget() {
-    return Container(
-      color: Colors.grey[300],
-      child: const Center(
-        child: SizedBox(
-          width: 32,
-          height: 32,
-          child: CircularProgressIndicator(strokeWidth: 2.5),
-        ),
-      ),
-    );
+    return const VideoLoadingPlaceholder();
   }
 
   Widget _buildErrorWidget(BuildContext context) {

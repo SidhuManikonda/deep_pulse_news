@@ -12,6 +12,7 @@ class MoreTopicsWidget extends ConsumerWidget {
   const MoreTopicsWidget({super.key});
 
   @override
+  
   Widget build(BuildContext context, WidgetRef ref) {
     final homeViewModel = ref.watch(homeViewModelProvider);
     final theme = Theme.of(context);
@@ -43,7 +44,6 @@ class MoreTopicsWidget extends ConsumerWidget {
       separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
       itemBuilder: (context, index) {
         final topic = topics[index];
-        final iconData = _iconFor(topic.name);
         final iconColor = _paletteColor(index);
 
         return Material(
@@ -72,7 +72,7 @@ class MoreTopicsWidget extends ConsumerWidget {
                         color: iconColor.withValues(alpha: 0.12),
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(iconData, color: iconColor, size: 22),
+                      child: _topicIcon(topic.name, iconColor),
                     ),
                     const SizedBox(width: AppSpacing.md),
                     Expanded(
@@ -100,11 +100,53 @@ class MoreTopicsWidget extends ConsumerWidget {
     );
   }
 
+  /// Artwork that no Material glyph covers — drop the file in and it takes
+  /// over from the built-in icon automatically. Keys are lowercase topic
+  /// names. Missing files fall back to [_iconFor], so an entry can be added
+  /// here before the asset exists without breaking the screen.
+  static const _topicIconAssets = <String, String>{
+    'former': 'assets/images/topic_farmer.jpg',
+    'farmer': 'assets/images/topic_farmer.jpg',
+  };
+
+  Widget _topicIcon(String name, Color color) {
+    final key = name.toLowerCase().trim();
+    final asset = _topicIconAssets[key];
+    final fallback = Icon(_iconFor(name), color: color, size: 22);
+
+    if (asset == null) return fallback;
+    // Full-colour artwork (a photo, not a glyph), so it fills the whole 44px
+    // circle edge-to-edge rather than sitting inset and tinted like the
+    // Material icons — same treatment as a profile picture.
+    return ClipOval(
+      child: Image.asset(
+        asset,
+        width: 44,
+        height: 44,
+        fit: BoxFit.cover,
+        // The source art is ~1250px square; decoding it at full size would
+        // park a ~6 MB bitmap in the image cache for a 44px circle. Decode at
+        // 3× the display size instead — sharp on the densest screens, tiny in
+        // memory.
+        cacheWidth: 132,
+        errorBuilder: (_, __, ___) => fallback,
+      ),
+    );
+  }
+
   IconData _iconFor(String name) {
     switch (name.toLowerCase().trim()) {
       case 'all info':    return Icons.public_rounded;
       case 'your area':   return Icons.location_on_rounded;
       case 'special':     return Icons.star_rounded;
+      // The agriculture topic. "Former" is how the backend spells it today;
+      // the other spellings are here so a fix on their side doesn't silently
+      // drop this back to the generic icon.
+      case 'former':
+      case 'farmer':
+      case 'farmers':
+      case 'agriculture':
+      case 'farming':     return Icons.agriculture_rounded;
       case 'electronics': return Icons.devices_rounded;
       case 'sports':      return Icons.sports_cricket_rounded;
       case 'cinema':      return Icons.movie_rounded;

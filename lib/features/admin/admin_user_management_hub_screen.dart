@@ -9,11 +9,13 @@ import '../../data/models/mandal.dart';
 import '../../data/repositories/state_repository.dart';
 import '../../data/repositories/district_repository.dart';
 import '../../data/repositories/mandal_repository.dart';
+import '../../enums/user_role.dart';
 import '../../extensions/user_extensions.dart';
 import '../../providers/app_providers.dart';
 import 'admin_user_management_screen.dart';
 import 'user_comments_screen.dart';
 import '../../core/constants/app_font_sizes.dart';
+import '../../shared/widgets/app_loader.dart';
 
 class AdminUserManagementHubScreen extends ConsumerStatefulWidget {
   const AdminUserManagementHubScreen({super.key});
@@ -46,6 +48,7 @@ class _AdminUserManagementHubScreenState
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final controller = ref.read(adminUserManagementControllerProvider);
       controller.fetchUsers(authRepository: ref.read(authRepositoryProvider), forceRefresh: true);
+      controller.fetchRoles(authRepository: ref.read(authRepositoryProvider));
       final locationVM = ref.read(locationViewModelProvider);
       if (locationVM.states.isEmpty && !locationVM.isLoadingStates) {
         locationVM.loadStates();
@@ -115,38 +118,38 @@ class _AdminUserManagementHubScreenState
     super.dispose();
   }
 
+  // Both of these receive the backend's role name/slug, so they resolve it
+  // through UserRole.fromApiSlug rather than matching raw strings — that's the
+  // one place that knows "News Desk"/"newsdesk" is the role formerly slugged
+  // `dist-reporter`.
   Color _getRoleColor(String? roleName) {
-    switch (roleName?.toLowerCase()) {
-      case 'admin':
+    switch (UserRole.fromApiSlug(roleName)) {
+      case UserRole.admin:
         return const Color(0xFF6C5CE7);
-      case 'subadmin':
-      case 'sub_admin':
+      case UserRole.subAdmin:
         return const Color(0xFF0984E3);
-      case 'dist-reporter':
+      case UserRole.distReporter:
         return const Color(0xFF00B894);
-      case 'reporter':
+      case UserRole.reporter:
         return const Color(0xFFF39C12);
-      case 'reader':
-        return const Color(0xFF636E72);
-      default:
+      case UserRole.reader:
+      case null:
         return const Color(0xFF636E72);
     }
   }
 
   IconData _getRoleIcon(String? roleName) {
-    switch (roleName?.toLowerCase()) {
-      case 'admin':
+    switch (UserRole.fromApiSlug(roleName)) {
+      case UserRole.admin:
         return Icons.shield_outlined;
-      case 'subadmin':
-      case 'sub_admin':
+      case UserRole.subAdmin:
         return Icons.supervisor_account_outlined;
-      case 'dist-reporter':
+      case UserRole.distReporter:
         return Icons.edit_note_outlined;
-      case 'reporter':
+      case UserRole.reporter:
         return Icons.campaign_outlined;
-      case 'reader':
-        return Icons.person_outline;
-      default:
+      case UserRole.reader:
+      case null:
         return Icons.person_outline;
     }
   }
@@ -170,6 +173,10 @@ class _AdminUserManagementHubScreenState
     final currentUser = ref.read(authViewModelProvider).user;
     final currentRole = currentUser?.primaryRole.value ?? 'reader';
     final isAdmin = currentRole == 'admin';
+    // Sub-admins manage users within their own state, so they get the same
+    // change-role and block actions. They cannot hand out admin / sub_admin
+    // roles — that list is filtered in [_showChangeRoleSheet].
+    final canManageUsers = isAdmin || currentRole == 'sub_admin';
     final users = controller.users;
     final roleNames =
         users
@@ -580,7 +587,14 @@ class _AdminUserManagementHubScreenState
             ),
 
             // ── User List ──
-            _buildUserList(context, controller, filteredUsers, theme, isAdmin: isAdmin),
+            _buildUserList(
+              context,
+              controller,
+              filteredUsers,
+              theme,
+              isAdmin: isAdmin,
+              canManageUsers: canManageUsers,
+            ),
           ],
         ),
       ),
@@ -834,10 +848,11 @@ class _AdminUserManagementHubScreenState
     List<User> filteredUsers,
     ThemeData theme, {
     bool isAdmin = false,
+    bool canManageUsers = false,
   }) {
     if (controller.isLoadingUsers) {
       return const SliverFillRemaining(
-        child: Center(child: CircularProgressIndicator()),
+        child: InlineLoader(message: 'Loading users...'),
       );
     }
 
@@ -931,7 +946,12 @@ class _AdminUserManagementHubScreenState
             onUpdatePassword: roleName != 'reader'
                 ? () => _showUpdatePasswordSheet(user)
                 : null,
-            onToggleBlock: isAdmin ? () => _confirmToggleBlock(user) : null,
+            onToggleBlock: canManageUsers
+                ? () => _confirmToggleBlock(user)
+                : null,
+            onChangeRole: canManageUsers
+                ? () => _showChangeRoleSheet(user)
+                : null,
             showMobile: isAdmin,
           );
         }, childCount: filteredUsers.length),
@@ -1101,6 +1121,537 @@ class _AdminUserManagementHubScreenState
                     ],
                   ),
                 ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // ── Change Role (admin only) ──
+  Future<void> _showChangeRoleSheet(User user) async {
+    final controller = ref.read(adminUserManagementControllerProvider);
+    final authRepo = ref.read(authRepositoryProvider);
+
+    // Ensure roles are loaded before opening the sheet.
+    if (controller.roles.isEmpty && !controller.isLoadingRoles) {
+      await controller.fetchRoles(authRepository: authRepo);
+    }
+    if (!mounted) return;
+
+    final theme = Theme.of(context);
+    final currentRoleId = user.roles?.isNotEmpty == true
+        ? user.roles!.first.id
+        : null;
+
+    // A sub-admin may reassign users below them, but must never be able to
+    // create an admin or another sub-admin. Same rule as the role dropdown in
+    // admin_user_management_screen.
+    final actingRole =
+        ref.read(authViewModelProvider).user?.primaryRole.value ?? 'reader';
+    final assignableRoles = actingRole == 'sub_admin'
+        ? controller.roles.where((role) {
+            final slug =
+                role.slug?.toLowerCase() ??
+                role.name.toLowerCase().replaceAll(' ', '_');
+            return slug != 'admin' && slug != 'sub_admin' && slug != 'sub-admin';
+          }).toList()
+        : controller.roles;
+
+    final pickedRoleId = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            return Container(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+              decoration: BoxDecoration(
+                color: theme.cardColor,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(20),
+                ),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: theme.dividerColor,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Change role',
+                    style: TextStyle(
+                      fontSize: scaledFontSize(18),
+                      fontWeight: FontWeight.w700,
+                      color: theme.appTextPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Select a new role for ${user.name}',
+                    style: TextStyle(
+                      fontSize: scaledFontSize(13),
+                      color: theme.appTextSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  if (controller.isLoadingRoles)
+                    const Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  else if (assignableRoles.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 24),
+                      child: Center(
+                        child: Text(
+                          'No roles available',
+                          style: TextStyle(
+                            color: theme.appTextLight,
+                            fontSize: scaledFontSize(13),
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxHeight: MediaQuery.of(ctx).size.height * 0.5,
+                      ),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: assignableRoles.length,
+                        itemBuilder: (_, i) {
+                          final role = assignableRoles[i];
+                          final isCurrent = role.id == currentRoleId;
+                          return ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(
+                              _getRoleIcon(role.name),
+                              size: 20,
+                              color: _getRoleColor(role.name),
+                            ),
+                            title: Text(
+                              role.name,
+                              style: TextStyle(
+                                fontSize: scaledFontSize(14),
+                                fontWeight: isCurrent
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                                color: theme.appTextPrimary,
+                              ),
+                            ),
+                            trailing: isCurrent
+                                ? Icon(
+                                    Icons.check_circle,
+                                    color: theme.appPrimary,
+                                    size: 20,
+                                  )
+                                : null,
+                            onTap: isCurrent
+                                ? null
+                                : () => Navigator.pop(ctx, role.id),
+                          );
+                        },
+                      ),
+                    ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (pickedRoleId == null || !mounted) return;
+    if (pickedRoleId == currentRoleId) return;
+
+    final newRole = controller.roles.firstWhere((r) => r.id == pickedRoleId);
+
+    // Backend requires state_id/district_id/mandal_id on PUT /user/{id}
+    // regardless of role. So always ask the admin to pick a full location
+    // when changing role — defaults to the target user's current values
+    // (which may be null for sub-admins or readers).
+    final picked = await _showAssignLocationSheet(user, newRole);
+    if (picked == null || !mounted) return;
+
+    final success = await authRepo.updateUserRole(
+      existingUser: user,
+      newRoleId: pickedRoleId,
+      overrideStateId: picked.stateId,
+      overrideDistrictId: picked.districtId,
+      overrideMandalId: picked.mandalId,
+    );
+
+    if (success) {
+      await controller.fetchUsers(
+        authRepository: authRepo,
+        forceRefresh: true,
+      );
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            success
+                ? '${user.name}\'s role updated'
+                : 'Failed to update role',
+          ),
+          backgroundColor: success ? Colors.green[600] : Colors.red[600],
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      );
+    }
+  }
+
+  /// Bottom sheet: pick state / district / mandal for a role change. Returns
+  /// null if the admin cancels. State/district/mandal are all required —
+  /// the backend's PUT /user/{id} rejects partial location data.
+  Future<({int stateId, int districtId, int mandalId})?>
+      _showAssignLocationSheet(User user, Role newRole) async {
+    final locationVM = ref.read(locationViewModelProvider);
+
+    // Preload states. Districts/mandals come later based on the picked state.
+    if (locationVM.states.isEmpty && !locationVM.isLoadingStates) {
+      await locationVM.loadStates();
+    }
+
+    int? pickedStateId = user.stateId;
+    int? pickedDistrictId = user.districtId;
+    int? pickedMandalId = user.mandalId;
+
+    // Pre-load child lists if we already know the parent IDs.
+    if (pickedStateId != null) {
+      await locationVM.loadDistricts(pickedStateId);
+    }
+    if (pickedDistrictId != null) {
+      await locationVM.loadMandals(pickedDistrictId);
+    }
+
+    if (!mounted) return null;
+    final theme = Theme.of(context);
+
+    return showModalBottomSheet<({int stateId, int districtId, int mandalId})>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            final vm = ref.read(locationViewModelProvider);
+            final pickedState = vm.states
+                .where((s) => s.id == pickedStateId)
+                .firstOrNull;
+            final pickedDistrict = vm.districts
+                .where((d) => d.id == pickedDistrictId)
+                .firstOrNull;
+            final pickedMandal = vm.mandals
+                .where((m) => m.id == pickedMandalId)
+                .firstOrNull;
+
+            final canSubmit = pickedStateId != null &&
+                pickedDistrictId != null &&
+                pickedMandalId != null;
+
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(ctx).viewInsets.bottom,
+              ),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                decoration: BoxDecoration(
+                  color: theme.cardColor,
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(20),
+                  ),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: theme.dividerColor,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Assign location',
+                      style: TextStyle(
+                        fontSize: scaledFontSize(18),
+                        fontWeight: FontWeight.w700,
+                        color: theme.appTextPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Setting ${user.name} as "${newRole.name}". Pick a '
+                      'state, district and mandal.',
+                      style: TextStyle(
+                        fontSize: scaledFontSize(12),
+                        color: theme.appTextSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _LocationField(
+                      label: 'State',
+                      icon: Icons.map_outlined,
+                      valueText: pickedState?.name ?? 'Choose state',
+                      theme: theme,
+                      onTap: () async {
+                        final s = await _pickFromList<location_models.State>(
+                          title: 'Select State',
+                          items: vm.states,
+                          getName: (s) => s.name,
+                          theme: theme,
+                        );
+                        if (s == null) return;
+                        await locationVM.loadDistricts(s.id);
+                        setSheetState(() {
+                          pickedStateId = s.id;
+                          pickedDistrictId = null;
+                          pickedMandalId = null;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    _LocationField(
+                      label: 'District',
+                      icon: Icons.location_city_outlined,
+                      valueText: pickedDistrict?.name ??
+                          (pickedStateId == null
+                              ? 'Pick state first'
+                              : 'Choose district'),
+                      enabled: pickedStateId != null,
+                      theme: theme,
+                      onTap: () async {
+                        final d = await _pickFromList<District>(
+                          title: 'Select District',
+                          items: vm.districts,
+                          getName: (d) => d.name,
+                          theme: theme,
+                        );
+                        if (d == null) return;
+                        await locationVM.loadMandals(d.id);
+                        setSheetState(() {
+                          pickedDistrictId = d.id;
+                          pickedMandalId = null;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    _LocationField(
+                      label: 'Mandal',
+                      icon: Icons.place_outlined,
+                      valueText: pickedMandal?.name ??
+                          (pickedDistrictId == null
+                              ? 'Pick district first'
+                              : 'Choose mandal'),
+                      enabled: pickedDistrictId != null,
+                      theme: theme,
+                      onTap: () async {
+                        final m = await _pickFromList<Mandal>(
+                          title: 'Select Mandal',
+                          items: vm.mandals,
+                          getName: (m) => m.name,
+                          theme: theme,
+                        );
+                        if (m == null) return;
+                        setSheetState(() => pickedMandalId = m.id);
+                      },
+                    ),
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: canSubmit
+                            ? () => Navigator.pop(
+                                  ctx,
+                                  (
+                                    stateId: pickedStateId!,
+                                    districtId: pickedDistrictId!,
+                                    mandalId: pickedMandalId!,
+                                  ),
+                                )
+                            : null,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: theme.appPrimary,
+                          disabledBackgroundColor: theme.dividerColor,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        child: const Text(
+                          'Apply change',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// Reusable searchable list picker for state / district / mandal selection.
+  ///
+  /// The search box isn't decoration: Andhra Pradesh alone has 28 districts and
+  /// a district carries 25-odd mandals, so finding one by scrolling a flat list
+  /// meant hunting through a half-screen sheet. Typing two or three letters is
+  /// the difference between a moment and a scroll hunt, and every other place
+  /// the app picks a location (onboarding, profile, news upload) already lets
+  /// you search — this sheet was the odd one out.
+  Future<T?> _pickFromList<T>({
+    required String title,
+    required List<T> items,
+    required String Function(T) getName,
+    required ThemeData theme,
+  }) {
+    return showModalBottomSheet<T>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      isScrollControlled: true,
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.6,
+      ),
+      builder: (ctx) {
+        var query = '';
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            final trimmed = query.trim().toLowerCase();
+            final visible = trimmed.isEmpty
+                ? items
+                : items
+                      .where(
+                        (item) => getName(item).toLowerCase().contains(trimmed),
+                      )
+                      .toList();
+
+            return Padding(
+              // Lifts the sheet above the keyboard, so the list the admin is
+              // filtering doesn't end up behind it.
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(ctx).viewInsets.bottom,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                    child: Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: scaledFontSize(16),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  if (items.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      child: TextField(
+                        onChanged: (v) => setSheetState(() => query = v),
+                        style: TextStyle(fontSize: scaledFontSize(14)),
+                        decoration: InputDecoration(
+                          hintText: 'Search...',
+                          hintStyle: TextStyle(
+                            color: theme.appTextLight,
+                            fontSize: scaledFontSize(14),
+                          ),
+                          prefixIcon: Icon(
+                            Icons.search,
+                            size: 20,
+                            color: theme.appTextLight,
+                          ),
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                    ),
+                  const Divider(height: 1),
+                  if (items.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        'No items available',
+                        style: TextStyle(
+                          color: theme.appTextLight,
+                          fontSize: scaledFontSize(13),
+                        ),
+                      ),
+                    )
+                  else if (visible.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        'Nothing matches "${query.trim()}"',
+                        style: TextStyle(
+                          color: theme.appTextLight,
+                          fontSize: scaledFontSize(13),
+                        ),
+                      ),
+                    )
+                  else
+                    Flexible(
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        // Lets a drag on the list dismiss the keyboard instead
+                        // of the admin having to reach for Back first.
+                        keyboardDismissBehavior:
+                            ScrollViewKeyboardDismissBehavior.onDrag,
+                        itemCount: visible.length,
+                        itemBuilder: (_, i) {
+                          final item = visible[i];
+                          return ListTile(
+                            dense: true,
+                            title: Text(
+                              getName(item),
+                              style: TextStyle(fontSize: scaledFontSize(14)),
+                            ),
+                            onTap: () => Navigator.pop(ctx, item),
+                          );
+                        },
+                      ),
+                    ),
+                ],
               ),
             );
           },
@@ -1313,6 +1864,7 @@ class _UserCard extends StatelessWidget {
   final VoidCallback onDelete;
   final VoidCallback? onUpdatePassword;
   final VoidCallback? onToggleBlock;
+  final VoidCallback? onChangeRole;
   final String? locationText;
   final bool showMobile;
 
@@ -1324,6 +1876,7 @@ class _UserCard extends StatelessWidget {
     required this.onDelete,
     this.onUpdatePassword,
     this.onToggleBlock,
+    this.onChangeRole,
     this.locationText,
     this.showMobile = true,
   });
@@ -1489,19 +2042,28 @@ class _UserCard extends StatelessWidget {
                       bottom: Radius.circular(12),
                     ),
                   ),
-                  child: Row(
+                  // Wrap (not Row) so chips flow to a second line on narrow
+                  // screens — with four actions (Update Password, Change Role,
+                  // Block, Delete) Row was overflowing horizontally.
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
                     children: [
-                      if (onUpdatePassword != null) ...[
+                      // if (onUpdatePassword != null)
+                      //   _buildActionChip(
+                      //     icon: Icons.key_outlined,
+                      //     label: 'Password',
+                      //     color: Colors.deepPurple,
+                      //     onTap: onUpdatePassword!,
+                      //   ),
+                      if (onChangeRole != null)
                         _buildActionChip(
-                          icon: Icons.key_outlined,
-                          label: 'Update Password',
-                          color: Colors.deepPurple,
-                          onTap: onUpdatePassword!,
+                          icon: Icons.swap_horiz_rounded,
+                          label: 'Change Role',
+                          color: const Color(0xFF0984E3),
+                          onTap: onChangeRole!,
                         ),
-                        const SizedBox(width: 8),
-                      ],
-                      const Spacer(),
-                      if (onToggleBlock != null) ...[
+                      if (onToggleBlock != null)
                         _buildActionChip(
                           icon: user.isBlockedByAdmin
                               ? Icons.lock_open
@@ -1510,8 +2072,6 @@ class _UserCard extends StatelessWidget {
                           color: user.isBlockedByAdmin ? Colors.green : Colors.orange,
                           onTap: onToggleBlock!,
                         ),
-                        const SizedBox(width: 8),
-                      ],
                       _buildActionChip(
                         icon: Icons.delete_outline,
                         label: 'Delete',
@@ -1555,6 +2115,89 @@ class _UserCard extends StatelessWidget {
                 fontWeight: FontWeight.w600,
                 color: color,
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Form-row used in the change-role location sheet. Shows a labelled,
+/// tappable field with the currently-picked value (or a placeholder when
+/// nothing is set yet, or a "Pick parent first" hint when disabled).
+class _LocationField extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final String valueText;
+  final bool enabled;
+  final ThemeData theme;
+  final VoidCallback onTap;
+
+  const _LocationField({
+    required this.label,
+    required this.icon,
+    required this.valueText,
+    required this.theme,
+    required this.onTap,
+    this.enabled = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          color: enabled
+              ? theme.scaffoldBackgroundColor
+              : theme.dividerColor.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: theme.dividerColor.withOpacity(0.3),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 18,
+              color: enabled ? theme.appPrimary : theme.appTextLight,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: scaledFontSize(11),
+                      color: theme.appTextLight,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    valueText,
+                    style: TextStyle(
+                      fontSize: scaledFontSize(14),
+                      color: enabled
+                          ? theme.appTextPrimary
+                          : theme.appTextLight,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.keyboard_arrow_down,
+              size: 18,
+              color: enabled ? theme.appTextSecondary : theme.appTextLight,
             ),
           ],
         ),

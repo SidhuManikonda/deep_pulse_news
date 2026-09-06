@@ -1,4 +1,4 @@
-package com.example.deep_pulse_news
+package media.deeppulse.deep_pulse_news
 
 import io.flutter.embedding.android.FlutterActivity
 

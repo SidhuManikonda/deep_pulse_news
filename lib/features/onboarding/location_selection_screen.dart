@@ -1,83 +1,94 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../shared/widgets/custom_button.dart';
-import '../../shared/widgets/auto_scaled_text.dart';
+
+import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_font_sizes.dart';
+import '../../core/constants/app_spacing.dart';
+import '../../shared/widgets/custom_button.dart';
 import 'state_selection_screen.dart';
 
-class LocationSelectionScreen extends ConsumerStatefulWidget {
+class LocationSelectionScreen extends ConsumerWidget {
   const LocationSelectionScreen({super.key});
 
   @override
-  ConsumerState<LocationSelectionScreen> createState() =>
-      _LocationSelectionScreenState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
 
-class _LocationSelectionScreenState
-    extends ConsumerState<LocationSelectionScreen> {
-  @override
-  Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: Colors.white,
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Location icon
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF2196F3),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: const Center(
-                  child: Icon(Icons.location_on, color: Colors.white, size: 40),
+              const Spacer(flex: 2),
+
+              // Icon
+              Center(
+                child: Container(
+                  width: 100, height: 100,
+                  decoration: BoxDecoration(
+                    color: theme.appPrimary.withValues(alpha: 0.08),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.location_on_rounded,
+                    size: 50,
+                    color: theme.appPrimary,
+                  ),
                 ),
               ),
-              const SizedBox(height: 40),
 
-              // Title and description
+              const SizedBox(height: AppSpacing.xxl),
+
               Text(
-                'Select Location',
+                'Where are you from?',
+                textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: appFontSizeTitle,
+                  fontSize: scaledFontSize(26),
                   fontWeight: FontWeight.bold,
-                  color: Theme.of(context).textTheme.headlineLarge?.color,
+                  color: const Color(0xFF1C1C1E),
+                  letterSpacing: -0.3,
                 ),
-                textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpacing.md),
               Text(
-                'Choose your State, District, and Mandal to get localized news content',
-                style: TextStyle(
-                  fontSize: appFontSizeSubHeader,
-                  color: Theme.of(context).textTheme.bodyMedium?.color,
-                ),
+                'Get news that matters to your community.\nJust 3 quick steps.',
                 textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: scaledFontSize(15),
+                  color: const Color(0xFF8E8E93),
+                  height: 1.5,
+                ),
               ),
-              const SizedBox(height: 60),
 
-              // Get Started Button
+              const SizedBox(height: AppSpacing.xxxl),
+
+              // Step preview
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _stepBadge(theme, Icons.map_outlined, 'State'),
+                  _connector(),
+                  _stepBadge(theme, Icons.location_city_outlined, 'District'),
+                  _connector(),
+                  _stepBadge(theme, Icons.place_outlined, 'Area'),
+                ],
+              ),
+
+              const Spacer(flex: 3),
+
               CustomButton(
                 text: 'Get Started',
-                onPressed: () => _navigateToStateSelection(),
-                backgroundColor: const Color(0xFF2196F3),
-                textColor: Colors.white,
                 width: double.infinity,
-                height: 56,
-                borderRadius: 12,
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const StateSelectionScreen()),
+                ),
               ),
-              const SizedBox(height: 16),
 
-              // Info text
-              Text(
-                'You will select your location in 3 simple steps',
-                style: TextStyle(fontSize: appFontSizeBody, color: Colors.grey[600]),
-                textAlign: TextAlign.center,
-              ),
+              const SizedBox(height: AppSpacing.xxxl),
             ],
           ),
         ),
@@ -85,10 +96,41 @@ class _LocationSelectionScreenState
     );
   }
 
-  void _navigateToStateSelection() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => const StateSelectionScreen()),
+  Widget _stepBadge(ThemeData theme, IconData icon, String label) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 52, height: 52,
+          decoration: const BoxDecoration(
+            color: Color(0xFFF2F2F7),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, size: 24, color: const Color(0xFF8E8E93)),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 11,
+            color: Color(0xFF8E8E93),
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _connector() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 22),
+      child: Container(
+        width: 30, height: 2,
+        decoration: BoxDecoration(
+          color: const Color(0xFFE5E5EA),
+          borderRadius: BorderRadius.circular(1),
+        ),
+      ),
     );
   }
 }

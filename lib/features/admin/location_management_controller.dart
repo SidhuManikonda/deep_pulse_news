@@ -33,6 +33,7 @@ class LocationManagementController extends ChangeNotifier {
   String? _districtsError;
   String? _mandalsError;
   String? _createError;
+  String? _updateError;
 
   // Current tab
   LocationType _currentType = LocationType.state;
@@ -51,6 +52,7 @@ class LocationManagementController extends ChangeNotifier {
   String? get districtsError => _districtsError;
   String? get mandalsError => _mandalsError;
   String? get createError => _createError;
+  String? get updateError => _updateError;
   LocationType get currentType => _currentType;
 
   void setCurrentType(LocationType type) {
@@ -312,6 +314,92 @@ class LocationManagementController extends ChangeNotifier {
       }
       return false;
     } catch (e) {
+      return false;
+    }
+  }
+
+  // ── Rename ────────────────────────────────────────────────────────────────
+  // PUT /states|/districts|/mandals/{id}. The repositories send the whole row,
+  // so `is_active` and the parent id ride along unchanged and only the name
+  // moves. Renaming keeps the id, so news already tagged to this location
+  // stays linked — nothing to re-point.
+
+  Future<bool> renameState(
+    location_models.State state,
+    String newName,
+  ) async {
+    return _runRename(() async {
+      final result = await _stateRepository.updateState(
+        state.id,
+        location_models.State(
+          id: state.id,
+          name: newName,
+          slug: state.slug,
+          isActive: state.isActive,
+          createdAt: state.createdAt,
+        ),
+      );
+      if (result == null) return false;
+      final i = _states.indexWhere((s) => s.id == state.id);
+      if (i != -1) _states[i] = result;
+      // The selector dropdowns hold the old object by reference; refresh it so
+      // the district/mandal tabs don't keep showing the pre-rename label.
+      if (_selectedState?.id == state.id) _selectedState = result;
+      return true;
+    });
+  }
+
+  Future<bool> renameDistrict(District district, String newName) async {
+    return _runRename(() async {
+      final result = await _districtRepository.updateDistrict(
+        district.id,
+        District(
+          id: district.id,
+          stateId: district.stateId,
+          name: newName,
+          slug: district.slug,
+          isActive: district.isActive,
+          createdAt: district.createdAt,
+        ),
+      );
+      if (result == null) return false;
+      final i = _districts.indexWhere((d) => d.id == district.id);
+      if (i != -1) _districts[i] = result;
+      if (_selectedDistrict?.id == district.id) _selectedDistrict = result;
+      return true;
+    });
+  }
+
+  Future<bool> renameMandal(Mandal mandal, String newName) async {
+    return _runRename(() async {
+      final result = await _mandalRepository.updateMandal(
+        mandal.id,
+        Mandal(
+          id: mandal.id,
+          districtId: mandal.districtId,
+          name: newName,
+          slug: mandal.slug,
+          isActive: mandal.isActive,
+          createdAt: mandal.createdAt,
+        ),
+      );
+      if (result == null) return false;
+      final i = _mandals.indexWhere((m) => m.id == mandal.id);
+      if (i != -1) _mandals[i] = result;
+      return true;
+    });
+  }
+
+  Future<bool> _runRename(Future<bool> Function() action) async {
+    _updateError = null;
+    try {
+      final ok = await action();
+      if (!ok) _updateError = 'The server did not confirm the change';
+      notifyListeners();
+      return ok;
+    } catch (e) {
+      _updateError = e.toString();
+      notifyListeners();
       return false;
     }
   }

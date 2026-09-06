@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
 
@@ -36,9 +35,7 @@ class ApiService {
     if (_authToken != null) 'Authorization': 'Bearer $_authToken',
   };
 
-  Map<String, String> get _defaultHeaders => {
-    'Accept': 'application/json',
-  };
+  Map<String, String> get _defaultHeaders => {'Accept': 'application/json'};
 
   // Helper method to show error alerts
   void _showErrorAlert(String message, {String? title}) {
@@ -100,7 +97,11 @@ class ApiService {
     bool showErrorAlert = true,
   }) async {
     try {
-      final requestHeaders = {..._defaultHeaders, ...headers, if (useAuth) ..._authHeaders};
+      final requestHeaders = {
+        ..._defaultHeaders,
+        ...headers,
+        if (useAuth) ..._authHeaders,
+      };
 
       // Build URI with query parameters only if they exist
       final uri = queryParameters.isNotEmpty
@@ -378,6 +379,10 @@ class ApiService {
     required Map<String, dynamic> fields,
     List<File>? files,
     String fileFieldName = 'files[]',
+
+    /// Files that each need their own field name (`ad_1`, `ad_2`) instead of
+    /// sharing one repeated key like `files[]`.
+    Map<String, File>? namedFiles,
     bool useAuth = true,
     bool showErrorAlert = true,
   }) async {
@@ -395,32 +400,26 @@ class ApiService {
         request.fields[key] = value.toString();
       });
 
-      // Add files — stream from disk instead of loading all bytes into memory
       if (files != null && files.isNotEmpty) {
         for (final file in files) {
-          final length = await file.length();
-          final stream = http.ByteStream(file.openRead());
+          final bytes = await file.readAsBytes();
 
-          // Ensure filename has a proper extension
-          // Some phones return cache paths without extensions
           var filename = basename(file.path);
           if (!filename.contains('.')) {
-            // Read first bytes to detect type
-            final headerBytes = await file.openRead(0, 8).expand((b) => b).toList();
-            if (headerBytes.length >= 4) {
-              if (headerBytes[0] == 0xFF && headerBytes[1] == 0xD8) {
+            if (bytes.length >= 4) {
+              if (bytes[0] == 0xFF && bytes[1] == 0xD8) {
                 filename = '$filename.jpg';
-              } else if (headerBytes[0] == 0x89 && headerBytes[1] == 0x50) {
+              } else if (bytes[0] == 0x89 && bytes[1] == 0x50) {
                 filename = '$filename.png';
-              } else if (headerBytes[0] == 0x52 && headerBytes[1] == 0x49) {
+              } else if (bytes[0] == 0x52 && bytes[1] == 0x49) {
                 filename = '$filename.webp';
-              } else if (headerBytes[0] == 0x47 && headerBytes[1] == 0x49) {
+              } else if (bytes[0] == 0x47 && bytes[1] == 0x49) {
                 filename = '$filename.gif';
-              } else if (headerBytes.length >= 8 &&
-                  headerBytes[4] == 0x66 && headerBytes[5] == 0x74) {
+              } else if (bytes.length >= 8 &&
+                  bytes[4] == 0x66 &&
+                  bytes[5] == 0x74) {
                 filename = '$filename.mp4';
               } else {
-                // Default to jpg for unknown image types
                 filename = '$filename.jpg';
               }
             } else {
@@ -428,27 +427,42 @@ class ApiService {
             }
           }
 
-          final multipartFile = http.MultipartFile(
+          final multipartFile = http.MultipartFile.fromBytes(
             fileFieldName,
-            stream,
-            length,
+            bytes,
             filename: filename,
           );
           request.files.add(multipartFile);
         }
       }
 
+      // Files that need their own field name (ad_1, ad_2) rather than being
+      // repeated under one key. Same extension-sniffing as above, since the
+      // gallery can hand back paths with no suffix.
+      if (namedFiles != null) {
+        for (final entry in namedFiles.entries) {
+          final bytes = await entry.value.readAsBytes();
+          var filename = basename(entry.value.path);
+          if (!filename.contains(".")) {
+            final isMp4 =
+                bytes.length >= 8 && bytes[4] == 0x66 && bytes[5] == 0x74;
+            filename = isMp4 ? "$filename.mp4" : "$filename.jpg";
+          }
+          request.files.add(
+            http.MultipartFile.fromBytes(entry.key, bytes, filename: filename),
+          );
+        }
+      }
+
       final streamedResponse = await request.send().timeout(
         const Duration(minutes: 5),
         onTimeout: () {
-          throw Exception('Upload timed out. Please try with smaller files or a better connection.');
+          throw Exception(
+            'Upload timed out. Please try with smaller files or a better connection.',
+          );
         },
       );
       final response = await http.Response.fromStream(streamedResponse);
-
-
-
-      // Check for non-JSON responses (e.g., nginx 413, server HTML errors)
       if (response.body.trimLeft().startsWith('<')) {
         final msg = response.statusCode == 413
             ? 'File too large. Please reduce file size.'
@@ -480,7 +494,17 @@ class ApiService {
         if (showErrorAlert) {
           _showErrorAlert(errorMessage, title: 'Upload Failed');
         }
-        responseBody['error'] = 'Failed: ${response.statusCode}';
+        // Only supply an `error` when the body didn't carry one. Assigning
+        // unconditionally destroyed the server's own explanation — a 500 comes
+        // back as {message: "Something went wrong", error: "SQLSTATE[...]"},
+        // and overwriting `error` with "Failed: 500" threw away the only line
+        // that said what actually broke. Callers detect failure by the key's
+        // presence, which still holds.
+        responseBody['statusCode'] = response.statusCode;
+        responseBody.putIfAbsent(
+          'error',
+          () => 'Failed: ${response.statusCode}',
+        );
         return responseBody;
       }
     } catch (e) {

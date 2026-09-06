@@ -8,6 +8,16 @@ class NewsTranslation {
   final String content;
   final DateTime createdAt;
 
+  /// Optional title color hex ("#RRGGBB"). The backend returns it inside the
+  /// translation. Null/blank when the author didn't pick one.
+  final String? titleColor;
+
+  /// Optional description color hex. Backend key is `content_color`.
+  final String? descriptionColor;
+
+  /// Optional full-article color hex. Backend key is `full_text_color`.
+  final String? fullTextColor;
+
   NewsTranslation({
     required this.id,
     required this.newsId,
@@ -17,7 +27,15 @@ class NewsTranslation {
     required this.shortDescription,
     required this.content,
     required this.createdAt,
+    this.titleColor,
+    this.descriptionColor,
+    this.fullTextColor,
   });
+
+  static String? _cleanHex(dynamic v) {
+    if (v is String && v.trim().isNotEmpty) return v.trim();
+    return null;
+  }
 
   factory NewsTranslation.fromJson(Map<String, dynamic> json) {
     return NewsTranslation(
@@ -29,6 +47,9 @@ class NewsTranslation {
       shortDescription: json['short_description'] ?? '',
       content: json['content'] ?? '',
       createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '') ?? DateTime.now(),
+      titleColor: _cleanHex(json['title_color']),
+      descriptionColor: _cleanHex(json['content_color']),
+      fullTextColor: _cleanHex(json['full_text_color']),
     );
   }
 
@@ -42,6 +63,9 @@ class NewsTranslation {
       'short_description': shortDescription,
       'content': content,
       'created_at': createdAt.toIso8601String(),
+      if (titleColor != null) 'title_color': titleColor,
+      if (descriptionColor != null) 'content_color': descriptionColor,
+      if (fullTextColor != null) 'full_text_color': fullTextColor,
     };
   }
 }

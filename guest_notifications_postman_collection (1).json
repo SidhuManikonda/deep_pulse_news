@@ -1,0 +1,471 @@
+{
+	"info": {
+		"_postman_id": "b2c3d4e5-f6a7-8901-2345-67890bcdef01",
+		"name": "NewApp - Guest Notifications (v2)",
+		"description": "Postman collection for all newly created and updated endpoints added in the Guest FCM notification feature.\n\nNew endpoints:\n- POST /api/guest/fcm-token (public – no auth required)\n\nUpdated endpoints:\n- POST /api/googleLogin (now accepts fcm_token + device_id)\n- POST /api/logout (now clears fcm_token on logout)\n- POST /api/fcm-token (now also clears token from guest_devices)\n- POST /api/send-notification (now includes target filter: all | users | guests)\n\nCollection variables:\n  base_url       → http://127.0.0.1:8000\n  bearer_token   → set after a successful googleLogin response",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1. Guest (No Auth Required)",
+			"description": "Endpoints that do NOT require an Authorization header. Call these before the user has logged in.",
+			"item": [
+				{
+					"name": "Register Guest FCM Token",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"device_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n    \"fcm_token\": \"YOUR_DEVICE_FCM_TOKEN_HERE\",\n    \"state_id\": 1,\n    \"district_id\": 5,\n    \"mandal_id\": 12\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/guest/fcm-token",
+							"host": ["{{base_url}}"],
+							"path": ["api", "guest", "fcm-token"]
+						},
+						"description": "Registers or refreshes an FCM token for a non-logged-in (guest) reader.\n\n- `device_id`: A stable UUID generated once on the client and stored in local device storage. Used to upsert the record idempotently on every app open.\n- `fcm_token`: The Firebase Cloud Messaging device registration token.\n- `state_id`, `district_id`, `mandal_id`: Optional geo fields used to filter news push notifications by location.\n\nNO Authorization header required.\n\nCall this again after logout if the user wants to keep receiving public news notifications."
+					},
+					"response": [
+						{
+							"name": "200 OK – Token saved",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"device_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n    \"fcm_token\": \"YOUR_DEVICE_FCM_TOKEN_HERE\",\n    \"state_id\": 1,\n    \"district_id\": 5,\n    \"mandal_id\": 12\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/guest/fcm-token"
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [],
+							"cookie": [],
+							"body": "{\n    \"message\": \"Guest FCM token saved successfully\",\n    \"guest_id\": 1\n}"
+						},
+						{
+							"name": "422 – Validation Failed",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"fcm_token\": \"token_only_no_device_id\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/api/guest/fcm-token"
+								}
+							},
+							"status": "Unprocessable Entity",
+							"code": 422,
+							"_postman_previewlanguage": "json",
+							"header": [],
+							"cookie": [],
+							"body": "{\n    \"message\": \"Validation failed\",\n    \"errors\": {\n        \"device_id\": [\"The device id field is required.\"]\n    }\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "2. Authentication (Updated Fields)",
+			"description": "Login and logout endpoints that were updated to handle FCM token migration between guest and authenticated state.",
+			"item": [
+				{
+					"name": "Google Login (Reader Login)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var json = pm.response.json();",
+									"if (json.access_token) {",
+									"    pm.collectionVariables.set('bearer_token', json.access_token);",
+									"    console.log('Bearer token saved to collection variable.');",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"id_token\": \"GOOGLE_ID_TOKEN_FROM_CLIENT\",\n    \"state_id\": 1,\n    \"district_id\": 5,\n    \"mandal_id\": 12,\n    \"device_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n    \"fcm_token\": \"YOUR_DEVICE_FCM_TOKEN_HERE\",\n    \"mobile\": \"9999999999\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/googleLogin",
+							"host": ["{{base_url}}"],
+							"path": ["api", "googleLogin"]
+						},
+						"description": "Primary reader login via Google OAuth.\n\n**New fields added:**\n- `device_id` (nullable): The client-generated stable device UUID. Used to clear the FCM token from `guest_devices` so the device stops receiving guest push notifications after login.\n- `fcm_token` (nullable): If provided, the FCM token is saved directly to the user record. **No separate POST /api/fcm-token call is needed.**\n\nThe test script auto-saves the returned `access_token` to the `bearer_token` collection variable."
+					},
+					"response": [
+						{
+							"name": "200 OK – Login Successful",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"id_token\": \"GOOGLE_ID_TOKEN\",\n    \"state_id\": 1,\n    \"district_id\": 5,\n    \"mandal_id\": 12,\n    \"device_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n    \"fcm_token\": \"YOUR_DEVICE_FCM_TOKEN_HERE\"\n}"
+								},
+								"url": { "raw": "{{base_url}}/api/googleLogin" }
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [],
+							"cookie": [],
+							"body": "{\n    \"user\": {\n        \"id\": 42,\n        \"name\": \"John Reader\",\n        \"email\": \"john@gmail.com\",\n        \"fcm_token\": \"YOUR_DEVICE_FCM_TOKEN_HERE\",\n        \"roles\": [{\"id\": 5, \"name\": \"Reader\"}]\n    },\n    \"access_token\": \"eyJ0eXAiOiJKV1QiLCJhbGci...\",\n    \"token_type\": \"Bearer\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Logout (Clears FCM Token)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{bearer_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/logout",
+							"host": ["{{base_url}}"],
+							"path": ["api", "logout"]
+						},
+						"description": "Logs out the authenticated user.\n\n**Updated behaviour:**\n1. Clears `fcm_token` on the user's record → device stops receiving authenticated-user push notifications immediately.\n2. Revokes the Passport access token.\n\nAfter calling this, the mobile client should call `POST /api/guest/fcm-token` if the user wants to keep receiving public news push notifications while logged out."
+					},
+					"response": [
+						{
+							"name": "200 OK",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"url": { "raw": "{{base_url}}/api/logout" }
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [],
+							"cookie": [],
+							"body": "{\n    \"message\": \"Successfully logged out\"\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "3. FCM – Push Notifications (Updated)",
+			"description": "FCM endpoints updated to handle both User and GuestDevice tokens.",
+			"item": [
+				{
+					"name": "Save FCM Token (Authenticated User)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{bearer_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"fcm_token\": \"YOUR_DEVICE_FCM_TOKEN_HERE\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/fcm-token",
+							"host": ["{{base_url}}"],
+							"path": ["api", "fcm-token"]
+						},
+						"description": "Saves / refreshes the FCM token for the currently authenticated user.\n\n**Updated behaviour:** Also clears the same FCM token from `guest_devices` if it exists, preventing the device from receiving duplicate notifications (once as a guest, once as a user).\n\nNote: If you pass `fcm_token` directly in `POST /api/googleLogin`, you do NOT need to call this endpoint separately."
+					},
+					"response": [
+						{
+							"name": "200 OK",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"fcm_token\": \"YOUR_DEVICE_FCM_TOKEN_HERE\"\n}"
+								},
+								"url": { "raw": "{{base_url}}/api/fcm-token" }
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [],
+							"cookie": [],
+							"body": "{\n    \"message\": \"FCM token saved successfully\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Send Admin Notification – All (Users + Guests)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{bearer_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"Breaking News\",\n    \"body\": \"A major event has occurred in your area!\",\n    \"target\": \"all\",\n    \"data\": {\n        \"news_id\": \"123\",\n        \"type\": \"news_published\"\n    }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/send-notification",
+							"host": ["{{base_url}}"],
+							"path": ["api", "send-notification"]
+						},
+						"description": "Admin endpoint to broadcast a push notification.\n\n**Requires:** `manage-users` permission.\n\n**New `target` field (optional, default: `all`):**\n- `all` → sends to ALL registered FCM tokens (authenticated users + guest devices)\n- `users` → sends only to logged-in users with FCM tokens\n- `guests` → sends only to guest (non-authenticated) devices\n\n**`user_ids` (optional):** When provided, restricts to specific user IDs. Cannot be combined with `target: guests`."
+					},
+					"response": [
+						{
+							"name": "200 OK – Dispatched",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"title\": \"Breaking News\",\n    \"body\": \"A major event!\",\n    \"target\": \"all\"\n}"
+								},
+								"url": { "raw": "{{base_url}}/api/send-notification" }
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [],
+							"cookie": [],
+							"body": "{\n    \"message\": \"Notifications dispatched\",\n    \"summary\": {\n        \"success_count\": 150,\n        \"failure_count\": 2,\n        \"results\": []\n    }\n}"
+						},
+						{
+							"name": "404 – No Devices Found",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"title\": \"Test\",\n    \"body\": \"Test\",\n    \"target\": \"guests\"\n}"
+								},
+								"url": { "raw": "{{base_url}}/api/send-notification" }
+							},
+							"status": "Not Found",
+							"code": 404,
+							"_postman_previewlanguage": "json",
+							"header": [],
+							"cookie": [],
+							"body": "{\n    \"message\": \"No devices with FCM tokens found.\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Send Admin Notification – Users Only",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{bearer_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"Exclusive Update\",\n    \"body\": \"This notification goes only to logged-in readers.\",\n    \"target\": \"users\",\n    \"data\": {\n        \"type\": \"exclusive\"\n    }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/send-notification",
+							"host": ["{{base_url}}"],
+							"path": ["api", "send-notification"]
+						},
+						"description": "Sends a push notification only to logged-in users (not guest devices). Use `target: users`."
+					},
+					"response": []
+				},
+				{
+					"name": "Send Admin Notification – Guests Only",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{bearer_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"Register Today!\",\n    \"body\": \"Create an account to get personalized news updates.\",\n    \"target\": \"guests\",\n    \"data\": {\n        \"type\": \"promo\"\n    }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/send-notification",
+							"host": ["{{base_url}}"],
+							"path": ["api", "send-notification"]
+						},
+						"description": "Sends a push notification only to guest devices (non-authenticated readers). Use `target: guests`.\n\nUseful for promotional messages encouraging guests to register."
+					},
+					"response": []
+				},
+				{
+					"name": "Send Admin Notification – Specific Users",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{bearer_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"Your article was approved!\",\n    \"body\": \"Your submitted article has been published.\",\n    \"user_ids\": [1, 5, 23],\n    \"data\": {\n        \"type\": \"article_approved\",\n        \"news_id\": \"456\"\n    }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/send-notification",
+							"host": ["{{base_url}}"],
+							"path": ["api", "send-notification"]
+						},
+						"description": "Sends a push notification to specific user IDs. The `target` field is ignored when `user_ids` is provided."
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{bearer_token}}",
+				"type": "string"
+			}
+		]
+	},
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://127.0.0.1:8000",
+			"type": "string",
+			"description": "Change to your production URL when deploying"
+		},
+		{
+			"key": "bearer_token",
+			"value": "your-auth-token-here",
+			"type": "string",
+			"description": "Auto-populated by the googleLogin test script. Or paste manually."
+		}
+	]
+}
