@@ -22,8 +22,9 @@ class Topic {
       slug: json['slug'] ?? '',
       isTrending: json['is_trending'] == 1,
       isActive: json['is_active'] == 1,
-      createdAt:json['created_at'] != null ? DateTime.parse(json['created_at']) : null,
+      createdAt: json['created_at'] != null
+          ? DateTime.parse(json['created_at'])
+          : null,
     );
   }
-
 }

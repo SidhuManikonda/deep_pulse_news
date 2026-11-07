@@ -5,6 +5,7 @@ import '../../features/auth/login_screen.dart';
 import '../../features/auth/phone_hint_screen.dart';
 import '../../features/auth/register_screen.dart';
 import '../../features/home/home_screen.dart';
+import '../../features/home/ad_detail_screen.dart';
 import '../../features/news/news_detail_screen_v2.dart';
 import '../../features/onboarding/location_selection_screen.dart';
 import '../../features/profile/profile_screen.dart';
@@ -33,7 +34,9 @@ class AppRouter {
       // case register:
       //   return MaterialPageRoute(builder: (_) => const RegisterScreen());
       case locationSelection:
-        return MaterialPageRoute(builder: (_) => const LocationSelectionScreen());
+        return MaterialPageRoute(
+          builder: (_) => const LocationSelectionScreen(),
+        );
       case home:
         return MaterialPageRoute(builder: (_) => const HomeScreen());
       case profile:
@@ -54,11 +57,19 @@ class AppRouter {
             );
           }
         }
+        // Same for a shared ad, https://api.deeppulse.media/ads/18.
+        if (name.startsWith('/ads/')) {
+          final id = int.tryParse(name.substring('/ads/'.length));
+          if (id != null) {
+            return MaterialPageRoute(
+              builder: (_) => AdDetailScreen(adId: id),
+              settings: settings,
+            );
+          }
+        }
         return MaterialPageRoute(
           builder: (_) => Scaffold(
-            body: Center(
-              child: Text('No route defined for ${settings.name}'),
-            ),
+            body: Center(child: Text('No route defined for ${settings.name}')),
           ),
         );
     }

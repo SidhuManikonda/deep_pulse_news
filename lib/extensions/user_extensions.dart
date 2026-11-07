@@ -13,8 +13,9 @@ extension UserRoleExtension on User {
     // UserRole.apiSlugs, which knows every slug the backend has used for each
     // role — so a backend rename (e.g. `dist-reporter` → `newsdesk`) can't
     // silently drop someone to Reader.
-    for (final role in UserRole.values.toList()
-      ..sort((a, b) => b.level.compareTo(a.level))) {
+    for (final role
+        in UserRole.values.toList()
+          ..sort((a, b) => b.level.compareTo(a.level))) {
       if (role.apiSlugs.any(hasRoleSlug)) return role;
     }
 

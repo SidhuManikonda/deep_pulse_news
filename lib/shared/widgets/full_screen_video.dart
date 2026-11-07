@@ -11,14 +11,12 @@ class FullScreenVideoPlayer extends StatefulWidget {
 }
 
 class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-
           Center(
             child: AspectRatio(
               aspectRatio: widget.controller.value.aspectRatio,

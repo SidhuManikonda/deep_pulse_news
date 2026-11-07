@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
 import '../../data/models/create_news_request.dart';
+import '../../data/models/news_ad.dart';
 import '../../data/repositories/news_repository.dart';
 
 final newsUploadViewModelProvider = ChangeNotifierProvider<NewsUploadViewModel>(
@@ -38,6 +39,35 @@ class NewsUploadViewModel extends ChangeNotifier {
   /// `ad_1` / `ad_2`. Optional — most articles carry none.
   File? _ad1;
   File? _ad2;
+
+  /// Ads already on the article being edited, as the feed returned them.
+  ///
+  /// Only populated when editing. An editor reviewing a reporter's story needs
+  /// to see what was attached before they can decide to drop it — until this
+  /// existed, the ads were invisible in the form and could only be replaced
+  /// blind.
+  final List<NewsAd> _existingAds = [];
+
+  /// Ad places the editor has marked to clear, by slot. Sent with the story
+  /// update rather than acted on at the tap, so the editor can change their
+  /// mind and nothing is dropped from an article whose own save then fails.
+  final Set<int> _removedAdSlots = {};
+
+  /// Ids of already-saved media the editor has taken out of the form. Sent as
+  /// `delete_media_ids[]` with the update, for the same reason the ad slots
+  /// are: a removal that a failed save doesn't reach should not have happened.
+  final Set<int> _deletedMediaIds = {};
+
+  /// A YouTube link per slot, sent as `youtube_url_1` / `youtube_url_2`.
+  ///
+  /// A slot holds a file or a link, never both, so [setAdYoutubeUrl] and
+  /// [setAd] each clear the other. Kept as the raw text the editor typed —
+  /// validation happens at the form, and the backend stores what was pasted.
+  final Map<int, String> _adYoutubeUrls = {};
+
+  /// New creatives to swap into an occupied slot. Ride along as `ad_1` / `ad_2`
+  /// on the same update — posting a file at a slot overwrites what's there.
+  final Map<int, File> _replacedAdFiles = {};
 
   // Location data
   List<location_models.State> _availableStates = [];
@@ -70,6 +100,24 @@ class NewsUploadViewModel extends ChangeNotifier {
   bool get acceptTerms => _acceptTerms;
   File? get ad1 => _ad1;
   File? get ad2 => _ad2;
+  List<NewsAd> get existingAds => List.unmodifiable(_existingAds);
+
+  bool isAdSlotRemoved(int slot) => _removedAdSlots.contains(slot);
+  File? replacementForSlot(int slot) => _replacedAdFiles[slot];
+
+  /// The ad already on the article in this slot, if any. An ad the payload gave
+  /// no slot for isn't matched here — it's shown, but can't be addressed.
+  NewsAd? existingAdInSlot(int slot) {
+    for (final ad in _existingAds) {
+      if (ad.slot == slot) return ad;
+    }
+    return null;
+  }
+
+  /// The file to post for a slot: the editor's replacement if they picked one,
+  /// otherwise whatever they attached to an empty slot.
+  File? adFileForSlot(int slot) =>
+      _replacedAdFiles[slot] ?? (slot == 1 ? _ad1 : _ad2);
 
   // ── Location getters ────────────────────────────────────────────────────────
   List<location_models.State> get availableStates => _availableStates;
@@ -146,8 +194,13 @@ class NewsUploadViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Drops an already-saved file from the form and remembers its id, so the
+  /// update can ask the backend to delete it. Without recording the id the
+  /// thumbnail disappears from the form but the file survives the save.
   void removeExistingMedia(int index) {
-    _existingMedia.removeAt(index);
+    final removed = _existingMedia.removeAt(index);
+    // id is 0 when the payload carried none — nothing we can name for deletion.
+    if (removed.id != 0) _deletedMediaIds.add(removed.id);
     notifyListeners();
   }
 
@@ -158,6 +211,56 @@ class NewsUploadViewModel extends ChangeNotifier {
     } else {
       _ad2 = file;
     }
+    // A slot holds one creative. Attaching a file drops whatever link was
+    // there, so the two can never both be sent for the same slot.
+    if (file != null) _adYoutubeUrls.remove(slot);
+    notifyListeners();
+  }
+
+  String? adYoutubeUrl(int slot) => _adYoutubeUrls[slot];
+
+  /// Sets or clears the YouTube link on [slot]. Passing null or blank clears
+  /// it; setting one drops any file queued for that slot.
+  void setAdYoutubeUrl(int slot, String? url) {
+    if (slot != 1 && slot != 2) return;
+    final text = url?.trim() ?? '';
+    if (text.isEmpty) {
+      _adYoutubeUrls.remove(slot);
+    } else {
+      _adYoutubeUrls[slot] = text;
+      setAd(slot, null);
+      _replacedAdFiles.remove(slot);
+      // Putting a link in is the opposite of emptying the slot.
+      _removedAdSlots.remove(slot);
+    }
+    notifyListeners();
+  }
+
+  /// Marks the ad in this slot to be cleared when the form is submitted.
+  void removeAdSlot(int slot) {
+    if (slot != 1 && slot != 2) return;
+    _removedAdSlots.add(slot);
+    // A creative queued for this slot is moot once the slot is being emptied.
+    _replacedAdFiles.remove(slot);
+    _adYoutubeUrls.remove(slot);
+    setAd(slot, null);
+    notifyListeners();
+  }
+
+  void undoRemoveAdSlot(int slot) {
+    if (!_removedAdSlots.remove(slot)) return;
+    notifyListeners();
+  }
+
+  /// Queues a new creative for a slot that already holds one. Sent as
+  /// `ad_1` / `ad_2` with the story update, which overwrites that place — so
+  /// this needs nothing from the ads API and no id.
+  void replaceAdInSlot(int slot, File file) {
+    if (slot != 1 && slot != 2) return;
+    _replacedAdFiles[slot] = file;
+    _adYoutubeUrls.remove(slot);
+    // Replacing is the opposite of clearing — un-mark it if it was queued to go.
+    _removedAdSlots.remove(slot);
     notifyListeners();
   }
 
@@ -319,22 +422,42 @@ class NewsUploadViewModel extends ChangeNotifier {
     required List<int> districtIds,
     required List<int> mandalIds,
     List<NewsMedia> existingMedia = const [],
+    List<NewsAd> existingAds = const [],
   }) async {
     clearData();
 
     // Set existing media from the news
     _existingMedia.addAll(existingMedia);
+    _existingAds.addAll(existingAds);
+    // Put a slot's link back in its field, so saving an edit that didn't touch
+    // the ads doesn't clear them.
+    for (final ad in existingAds) {
+      if (ad.isYoutube && ad.hasSlot) _adYoutubeUrls[ad.slot] = ad.url;
+    }
 
     // Wait for states to load if not already loaded
     await loadStates();
 
-    // Select topics
+    // Select topics. A topic the article carries but the topic list doesn't
+    // know about is dropped here, which is how an edit can silently come back
+    // with no topic selected and a Publish button that never enables — so say
+    // so rather than failing quietly.
     for (final topicId in topicIds) {
       final match = allTopics.where((t) => t.id == topicId);
       if (match.isNotEmpty) {
         _selectedCategories.add(match.first);
+      } else {
+        debugPrint(
+          '[prefill] topic $topicId is on the article but not in the '
+          'topic list (${allTopics.length} loaded) — not selected.',
+        );
       }
     }
+    debugPrint(
+      '[prefill] topics: article=$topicIds, available=${allTopics.length}, '
+      'selected=${_selectedCategories.map((t) => t.id).toList()}, '
+      'availableIds=${allTopics.map((t) => t.id).toList()}',
+    );
 
     // Select states and load their districts
     for (final sId in stateIds) {
@@ -375,6 +498,18 @@ class NewsUploadViewModel extends ChangeNotifier {
     _selectedDistrictIds.clear();
     _selectedMandalIds.clear();
     _acceptTerms = false;
+    // The ad slots have to be reset here too. This view model is a plain
+    // (non-autoDispose) provider, so it outlives the upload screen: leaving the
+    // files behind meant the next story opened with the last one's creatives
+    // still attached, and posted them again without the author ever picking an
+    // ad.
+    _ad1 = null;
+    _ad2 = null;
+    _existingAds.clear();
+    _removedAdSlots.clear();
+    _replacedAdFiles.clear();
+    _adYoutubeUrls.clear();
+    _deletedMediaIds.clear();
     notifyListeners();
   }
 
@@ -508,8 +643,16 @@ class NewsUploadViewModel extends ChangeNotifier {
         districtIds: List.from(_selectedDistrictIds),
         mandalIds: List.from(_selectedMandalIds),
         files: processedFiles,
-        ad1: _ad1,
-        ad2: _ad2,
+        // A slot's file is the editor's replacement when they picked one, and
+        // whatever was attached to an empty slot otherwise. Posting it at that
+        // slot is what overwrites the creative already there.
+        ad1: adFileForSlot(1),
+        ad2: adFileForSlot(2),
+        deleteMediaIds: _deletedMediaIds.toList()..sort(),
+        youtubeUrl1: _adYoutubeUrls[1],
+        youtubeUrl2: _adYoutubeUrls[2],
+        removeAd1: _removedAdSlots.contains(1),
+        removeAd2: _removedAdSlots.contains(2),
         isImportant: isImportant,
         isComment: isComment,
         showProfile: showProfile,
@@ -522,6 +665,11 @@ class NewsUploadViewModel extends ChangeNotifier {
       if (editNewsId != null) {
         await _newsRepository.updateNews(editNewsId, newsRequest);
         _lastUploadedNewsId = editNewsId;
+        // The ad edits rode along in that same request, so a saved story means
+        // saved ads — there's no second call to keep in step with this one.
+        _removedAdSlots.clear();
+        _replacedAdFiles.clear();
+        _deletedMediaIds.clear();
       } else {
         final created = await _newsRepository.createNews(newsRequest);
         _lastUploadedNewsId = created?.id;

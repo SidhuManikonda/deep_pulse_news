@@ -2,7 +2,7 @@ class AppConstants {
   static const String appName = 'NewsApp';
   static const String baseUrl = 'https://api.deeppulse.media/api';
   static const String imageBaseUrl = 'https://deeppulse.co.in';
-  static const String appVersion = '1.0.8';
+  static const String appVersion = '1.0.9';
   // API Endpoints
   static const String register = '/register';
   static const String login = '/login';
@@ -28,9 +28,12 @@ class AppConstants {
   static const String updatePassword = '/update-password';
   static const String report = '/report';
   static const String changePassword = '/change-password';
-  static const String blockUser = '/users'; // /users/:id/block — block a user (any authenticated user)
-  static const String blockComment = '/comments'; // /comments/:id/block — block a comment
-  static const String toggleBlockUser = '/user'; // /user/:id/toggle-block — admin only
+  static const String blockUser =
+      '/users'; // /users/:id/block — block a user (any authenticated user)
+  static const String blockComment =
+      '/comments'; // /comments/:id/block — block a comment
+  static const String toggleBlockUser =
+      '/user'; // /user/:id/toggle-block — admin only
   static const String googleLogin = '/googleLogin';
   static const String logout = '/logout';
   static const String deleteAccount = '/user/account';
@@ -44,7 +47,8 @@ class AppConstants {
   // In-app notifications (per-user inbox)
   static const String notifications = '/notifications';
   static const String notificationsUnreadCount = '/notifications/unread-count';
-  static const String notificationsMarkAllRead = '/notifications/mark-all-as-read';
+  static const String notificationsMarkAllRead =
+      '/notifications/mark-all-as-read';
   // Per-notification: '/notifications/{id}/mark-as-read'
 
   // Storage Keys

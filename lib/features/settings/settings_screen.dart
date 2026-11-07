@@ -38,8 +38,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     title: 'Auto-play videos',
                     subtitle: 'Play news videos automatically as you scroll',
                     value: ref.watch(autoPlayProvider).enabled,
-                    onChanged: (v) =>
-                        ref.read(autoPlayProvider).setEnabled(v),
+                    onChanged: (v) => ref.read(autoPlayProvider).setEnabled(v),
                   ),
                 ]),
                 const SizedBox(height: 20),
@@ -91,7 +90,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     iconBg: const Color(0xFF7B61FF),
                     title: 'Privacy Policy',
                     subtitle: 'How we handle your data',
-                    onTap: () => _launchUrl('https://deeppulse.media/privacy.php'),
+                    onTap: () =>
+                        _launchUrl('https://deeppulse.media/privacy.php'),
                     showDivider: true,
                   ),
                   _navTile(
@@ -99,7 +99,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     iconBg: const Color(0xFF0EA5E9),
                     title: 'Terms of Service',
                     subtitle: 'Rules for using Deep Pulse',
-                    onTap: () => _launchUrl('https://deeppulse.media/terms.php'),
+                    onTap: () =>
+                        _launchUrl('https://deeppulse.media/terms.php'),
                     showDivider: true,
                   ),
                   _navTile(
@@ -143,8 +144,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   Row(
                     children: [
                       IconButton(
-                        icon: const Icon(Icons.arrow_back,
-                            color: Colors.white),
+                        icon: const Icon(Icons.arrow_back, color: Colors.white),
                         onPressed: () => Navigator.pop(context),
                       ),
                     ],
@@ -264,8 +264,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           borderRadius: BorderRadius.circular(16),
           onTap: onTap,
           child: Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
             child: Row(
               children: [
                 Container(
@@ -302,8 +301,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                 ),
                 trailing ??
-                    Icon(Icons.chevron_right,
-                        color: theme.appGrey400, size: 20),
+                    Icon(
+                      Icons.chevron_right,
+                      color: theme.appGrey400,
+                      size: 20,
+                    ),
               ],
             ),
           ),
@@ -341,9 +343,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 width: 42,
                 height: 42,
                 decoration: BoxDecoration(
-                  color: iconBg.withValues(
-                    alpha: enabled ? 0.12 : 0.06,
-                  ),
+                  color: iconBg.withValues(alpha: enabled ? 0.12 : 0.06),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
@@ -406,18 +406,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     // itself almost always works if a browser/mail client is installed.
     final uri = Uri.parse(url);
     try {
-      final launched =
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
+      final launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
       if (!launched && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not open $url')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not open $url')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not open $url')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not open $url')));
       }
     }
   }
@@ -429,9 +431,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       SnackBar(
         content: const Text('Cache cleared'),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }
@@ -470,8 +470,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     color: theme.appPrimary,
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(Icons.newspaper,
-                      color: Colors.white, size: 26),
+                  child: const Icon(
+                    Icons.newspaper,
+                    color: Colors.white,
+                    size: 26,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Column(

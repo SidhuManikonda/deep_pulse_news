@@ -176,9 +176,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       iconBg: const Color(0xFF28C76F),
                       title: 'News Management',
                       subtitle: 'Manage pending, published & rejected news',
-                      // Ads Management follows for every role that reaches
-                      // this card, so the divider is unconditional now.
-                      showDivider: true,
+                      // Last tile for News Desk while Ads Management is
+                      // admin/sub-admin only (see below).
+                      showDivider:
+                          user.primaryRole.value == 'admin' ||
+                          user.primaryRole.value == 'sub_admin',
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -186,25 +188,29 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         ),
                       ),
                     ),
-                    // Ads Management — admin, sub-admin and News Desk. Same
-                    // audience as News Management, since ad inventory is run
-                    // by whoever runs the desk.
-                    _buildNewTile(
-                      context: context,
-                      icon: Icons.campaign_outlined,
-                      iconBg: const Color(0xFF7B61FF),
-                      title: 'Ads Management',
-                      subtitle: 'Create & schedule adverts shown in the feed',
-                      showDivider:
-                          user.primaryRole.value == 'admin' ||
-                          user.primaryRole.value == 'sub_admin',
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const AdsManagementScreen(),
+                    // Ads Management — admin and sub-admin only for now.
+                    // News Desk access is switched off; to give it back, put
+                    // the commented role check back into the condition and
+                    // make News Management's divider unconditional again.
+                    if (user.primaryRole.value == 'admin' ||
+                        user.primaryRole.value == 'sub_admin')
+                      // || user.primaryRole.value == 'dist-reporter'
+                      _buildNewTile(
+                        context: context,
+                        icon: Icons.campaign_outlined,
+                        iconBg: const Color(0xFF7B61FF),
+                        title: 'Ads Management',
+                        subtitle: 'Create & schedule adverts shown in the feed',
+                        showDivider:
+                            user.primaryRole.value == 'admin' ||
+                            user.primaryRole.value == 'sub_admin',
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const AdsManagementScreen(),
+                          ),
                         ),
                       ),
-                    ),
                     if (user.primaryRole.value == 'admin' ||
                         user.primaryRole.value == 'sub_admin')
                       _buildNewTile(

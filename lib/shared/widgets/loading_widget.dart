@@ -6,12 +6,7 @@ class LoadingWidget extends StatelessWidget {
   final double size;
   final Color? color;
 
-  const LoadingWidget({
-    super.key,
-    this.message,
-    this.size = 40,
-    this.color,
-  });
+  const LoadingWidget({super.key, this.message, this.size = 40, this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -34,10 +29,7 @@ class LoadingWidget extends StatelessWidget {
             const SizedBox(height: 16),
             Text(
               message!,
-              style: TextStyle(
-                color: theme.appTextSecondary,
-                fontSize: 14,
-              ),
+              style: TextStyle(color: theme.appTextSecondary, fontSize: 14),
               textAlign: TextAlign.center,
             ),
           ],
@@ -77,9 +69,10 @@ class _ShimmerLoadingState extends State<ShimmerLoading>
       duration: const Duration(milliseconds: 1500),
       vsync: this,
     );
-    _animation = Tween<double>(begin: -1, end: 1).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _animation = Tween<double>(
+      begin: -1,
+      end: 1,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
     _controller.repeat();
   }
 

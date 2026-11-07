@@ -168,9 +168,9 @@ class _AudioPlayerWidgetState extends State<AudioPlayerWidget> {
     final isPlaying = _controller?.value.isPlaying ?? false;
     final maxMs = _duration.inMilliseconds.toDouble();
     final valueMs = _position.inMilliseconds.toDouble().clamp(
-          0.0,
-          maxMs <= 0 ? 1.0 : maxMs,
-        );
+      0.0,
+      maxMs <= 0 ? 1.0 : maxMs,
+    );
 
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 14, 16, 14),
@@ -235,10 +235,12 @@ class _AudioPlayerWidgetState extends State<AudioPlayerWidget> {
                 SliderTheme(
                   data: SliderTheme.of(context).copyWith(
                     trackHeight: 3,
-                    thumbShape:
-                        const RoundSliderThumbShape(enabledThumbRadius: 6),
-                    overlayShape:
-                        const RoundSliderOverlayShape(overlayRadius: 12),
+                    thumbShape: const RoundSliderThumbShape(
+                      enabledThumbRadius: 6,
+                    ),
+                    overlayShape: const RoundSliderOverlayShape(
+                      overlayRadius: 12,
+                    ),
                     activeTrackColor: primary,
                     inactiveTrackColor: primary.withValues(alpha: 0.2),
                     thumbColor: primary,
@@ -259,8 +261,9 @@ class _AudioPlayerWidgetState extends State<AudioPlayerWidget> {
                     onChangeEnd: !_isInitialized || maxMs <= 0
                         ? null
                         : (v) {
-                            _controller
-                                ?.seekTo(Duration(milliseconds: v.toInt()));
+                            _controller?.seekTo(
+                              Duration(milliseconds: v.toInt()),
+                            );
                             setState(() => _isDragging = false);
                           },
                   ),

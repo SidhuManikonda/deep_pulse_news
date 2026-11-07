@@ -130,6 +130,11 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
       _controller!.removeListener(_onVideoStateChanged);
     }
     if (widget.usePreloader) {
+      // The preloader keeps this controller alive for reuse, so it has to be
+      // paused here — otherwise, when a pull-to-refresh swaps a playing video
+      // card for a different story, the video carries on with nothing on
+      // screen and is heard playing in the background.
+      _controller?.pause();
       _preloader.markInactive(widget.videoUrl);
     } else if (_controller != null) {
       _controller!.dispose();
@@ -216,9 +221,8 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
     }
 
     // Never show buffering spinner during drag, seek cooldown, or suppression
-    final isBuffering = _controller!.value.isBuffering &&
-        !_isDragging &&
-        !_suppressBuffering;
+    final isBuffering =
+        _controller!.value.isBuffering && !_isDragging && !_suppressBuffering;
     final isPlaying = _controller!.value.isPlaying;
 
     return RepaintBoundary(
@@ -273,7 +277,10 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
               ),
 
             // Play button overlay (when paused and not buffering)
-            if (!isPlaying && !isBuffering && !_isDragging && !_suppressBuffering)
+            if (!isPlaying &&
+                !isBuffering &&
+                !_isDragging &&
+                !_suppressBuffering)
               Container(
                 decoration: BoxDecoration(
                   color: Colors.black.withOpacity(0.5),
@@ -344,67 +351,70 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
                             onHorizontalDragUpdate: (_) {},
                             onHorizontalDragEnd: (_) {},
                             child: SliderTheme(
-                            data: SliderTheme.of(context).copyWith(
-                              trackHeight: 3,
-                              thumbShape: const RoundSliderThumbShape(
-                                enabledThumbRadius: 6,
-                                disabledThumbRadius: 6,
+                              data: SliderTheme.of(context).copyWith(
+                                trackHeight: 3,
+                                thumbShape: const RoundSliderThumbShape(
+                                  enabledThumbRadius: 6,
+                                  disabledThumbRadius: 6,
+                                ),
+                                overlayShape: const RoundSliderOverlayShape(
+                                  overlayRadius: 12,
+                                ),
+                                activeTrackColor: Theme.of(
+                                  context,
+                                ).primaryColor,
+                                inactiveTrackColor: Colors.white.withOpacity(
+                                  0.3,
+                                ),
+                                thumbColor: Theme.of(context).primaryColor,
+                                overlayColor: Theme.of(
+                                  context,
+                                ).primaryColor.withOpacity(0.2),
                               ),
-                              overlayShape: const RoundSliderOverlayShape(
-                                overlayRadius: 12,
-                              ),
-                              activeTrackColor: Theme.of(context).primaryColor,
-                              inactiveTrackColor:
-                                  Colors.white.withOpacity(0.3),
-                              thumbColor: Theme.of(context).primaryColor,
-                              overlayColor: Theme.of(context)
-                                  .primaryColor
-                                  .withOpacity(0.2),
-                            ),
-                            child: Slider(
-                              value: _currentPosition.inMilliseconds
-                                  .toDouble()
-                                  .clamp(
-                                    0.0,
-                                    _totalDuration.inMilliseconds.toDouble(),
-                                  ),
-                              min: 0,
-                              max: _totalDuration.inMilliseconds.toDouble(),
-                              onChangeStart: (value) {
-                                if (mounted && _controller != null) {
-                                  _wasPlayingBeforeDrag =
-                                      _controller!.value.isPlaying;
-                                  if (_wasPlayingBeforeDrag) {
-                                    _controller!.pause();
+                              child: Slider(
+                                value: _currentPosition.inMilliseconds
+                                    .toDouble()
+                                    .clamp(
+                                      0.0,
+                                      _totalDuration.inMilliseconds.toDouble(),
+                                    ),
+                                min: 0,
+                                max: _totalDuration.inMilliseconds.toDouble(),
+                                onChangeStart: (value) {
+                                  if (mounted && _controller != null) {
+                                    _wasPlayingBeforeDrag =
+                                        _controller!.value.isPlaying;
+                                    if (_wasPlayingBeforeDrag) {
+                                      _controller!.pause();
+                                    }
+                                    setState(() => _isDragging = true);
                                   }
-                                  setState(() => _isDragging = true);
-                                }
-                              },
-                              onChanged: (value) {
-                                if (mounted) {
-                                  // Only update the slider UI position —
-                                  // do NOT call seekTo here. Rapid seeks
-                                  // overwhelm the player and cause it to
-                                  // get stuck buffering.
-                                  setState(() {
-                                    _currentPosition = Duration(
-                                      milliseconds: value.toInt(),
+                                },
+                                onChanged: (value) {
+                                  if (mounted) {
+                                    // Only update the slider UI position —
+                                    // do NOT call seekTo here. Rapid seeks
+                                    // overwhelm the player and cause it to
+                                    // get stuck buffering.
+                                    setState(() {
+                                      _currentPosition = Duration(
+                                        milliseconds: value.toInt(),
+                                      );
+                                    });
+                                  }
+                                },
+                                onChangeEnd: (value) {
+                                  if (mounted && _controller != null) {
+                                    setState(() => _isDragging = false);
+                                    // Single seek on release
+                                    _seekToPosition(
+                                      Duration(milliseconds: value.toInt()),
+                                      resumePlaying: _wasPlayingBeforeDrag,
                                     );
-                                  });
-                                }
-                              },
-                              onChangeEnd: (value) {
-                                if (mounted && _controller != null) {
-                                  setState(() => _isDragging = false);
-                                  // Single seek on release
-                                  _seekToPosition(
-                                    Duration(milliseconds: value.toInt()),
-                                    resumePlaying: _wasPlayingBeforeDrag,
-                                  );
-                                }
-                              },
+                                  }
+                                },
+                              ),
                             ),
-                          ),
                           ),
                         ],
                       ),

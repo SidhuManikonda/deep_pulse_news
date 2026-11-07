@@ -126,8 +126,20 @@ class _NewsManagementScreenState extends ConsumerState<NewsManagementScreen>
       final response = await _newsRepo.getNews(
         userId: userId,
         authorId: _selectedAuthorId,
+        fromDate: _dateRange?.start,
+        toDate: _dateRange?.end,
       );
-      final scopedNews = _scope.applyScope(response.data);
+      if (_dateRange != null) {
+        // Says whether the endpoint honoured from_date/to_date: a full
+        // page spanning other days means it ignored them.
+        debugPrint(
+          '[NewsMgmt] asked ${_dateRange!.start} -> ${_dateRange!.end}, '
+          'server returned ${response.data.length} articles',
+        );
+      }
+      // Copied before sorting: `applyScope` may hand back the list it was
+      // given, and an empty-result page is not guaranteed to be growable.
+      final scopedNews = List<News>.from(_scope.applyScope(response.data));
       scopedNews.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       if (mounted) {
         setState(() {
@@ -138,7 +150,8 @@ class _NewsManagementScreenState extends ConsumerState<NewsManagementScreen>
           _isLoading = false;
         });
       }
-    } catch (e) {
+    } catch (e, stack) {
+      debugPrint('[NewsMgmt] _loadNews failed: $e\n$stack');
       if (mounted) {
         setState(() {
           _error = e.toString();
@@ -161,6 +174,8 @@ class _NewsManagementScreenState extends ConsumerState<NewsManagementScreen>
         userId: userId,
         cursor: _nextCursor,
         authorId: _selectedAuthorId,
+        fromDate: _dateRange?.start,
+        toDate: _dateRange?.end,
       );
       final scopedNews = _scope.applyScope(response.data);
 
@@ -290,6 +305,8 @@ class _NewsManagementScreenState extends ConsumerState<NewsManagementScreen>
         _dateRange!.start.month,
         _dateRange!.start.day,
       );
+      // End of the chosen day, to the millisecond. `23:59:59` left a
+      // one-second hole that dropped anything filed in that last second.
       final end = DateTime(
         _dateRange!.end.year,
         _dateRange!.end.month,
@@ -297,10 +314,22 @@ class _NewsManagementScreenState extends ConsumerState<NewsManagementScreen>
         23,
         59,
         59,
+        999,
       );
-      list = list
-          .where((n) => n.createdAt.isAfter(start) && n.createdAt.isBefore(end))
-          .toList();
+      final before = list.length;
+      list = list.where((n) {
+        // `created_at` comes back as UTC, so it is compared in local time —
+        // the day boundaries above are local. Without this, an article filed
+        // at 2am IST reads as the previous day (IST is UTC+5:30) and a date
+        // filter quietly loses it.
+        final filed = n.createdAt.toLocal();
+        return !filed.isBefore(start) && !filed.isAfter(end);
+      }).toList();
+      debugPrint(
+        '[NewsMgmt] date filter ${_dateRange!.start} → ${_dateRange!.end}: '
+        '${list.length} of $before loaded articles matched '
+        '(pool holds ${_allNews.length} loaded)',
+      );
     }
     if (_selectedStateId != null) {
       list = list.where((n) => n.hasStateId(_selectedStateId!)).toList();
@@ -347,24 +376,123 @@ class _NewsManagementScreenState extends ConsumerState<NewsManagementScreen>
     _loadNews();
   }
 
+  /// Offers the answers people actually want before offering a calendar.
+  ///
+  /// This opened a range picker straight away, which made the commonest case —
+  /// one day — the most awkward: the same date had to be tapped twice to fill
+  /// a start and an end nobody wanted. Today and Yesterday are now one tap.
   Future<void> _pickDateRange(ThemeData theme) async {
-    final picked = await showDateRangePicker(
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    void apply(DateTime from, DateTime to) {
+      setState(() => _dateRange = DateTimeRange(start: from, end: to));
+      _loadNews();
+    }
+
+    await showModalBottomSheet(
       context: context,
-      firstDate: DateTime(2024),
-      lastDate: DateTime.now(),
-      initialDateRange: _dateRange,
-      builder: (context, child) {
-        return Theme(
-          data: theme.copyWith(
-            colorScheme: theme.colorScheme.copyWith(primary: theme.appPrimary),
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (sheetContext) {
+        Widget option(IconData icon, String label, VoidCallback onTap) {
+          return ListTile(
+            leading: Icon(icon, size: 20, color: theme.appTextSecondary),
+            title: Text(
+              label,
+              style: TextStyle(
+                fontSize: scaledFontSize(14),
+                color: theme.appTextPrimary,
+              ),
+            ),
+            onTap: onTap,
+          );
+        }
+
+        DateTime back(int days) => today.subtract(Duration(days: days));
+
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 8),
+              Container(
+                width: 38,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: theme.appDivider,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 12),
+              option(Icons.today_outlined, 'Today', () {
+                Navigator.pop(sheetContext);
+                apply(today, today);
+              }),
+              option(Icons.history_rounded, 'Yesterday', () {
+                Navigator.pop(sheetContext);
+                apply(back(1), back(1));
+              }),
+              option(Icons.date_range_outlined, 'Last 7 days', () {
+                Navigator.pop(sheetContext);
+                apply(back(6), today);
+              }),
+              option(Icons.calendar_month_outlined, 'Last 30 days', () {
+                Navigator.pop(sheetContext);
+                apply(back(29), today);
+              }),
+              const Divider(height: 8),
+              option(Icons.event_outlined, 'Pick a date', () async {
+                Navigator.pop(sheetContext);
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: _dateRange?.start ?? today,
+                  firstDate: DateTime(2024),
+                  lastDate: now,
+                  builder: (context, child) => Theme(
+                    data: theme.copyWith(
+                      colorScheme: theme.colorScheme.copyWith(
+                        primary: theme.appPrimary,
+                      ),
+                    ),
+                    child: child!,
+                  ),
+                );
+                // One date means that whole day, so there is no second tap.
+                if (picked != null) apply(picked, picked);
+              }),
+              option(Icons.swap_horiz_rounded, 'Pick a range', () async {
+                Navigator.pop(sheetContext);
+                final picked = await showDateRangePicker(
+                  context: context,
+                  firstDate: DateTime(2024),
+                  lastDate: now,
+                  initialDateRange: _dateRange,
+                  builder: (context, child) => Theme(
+                    data: theme.copyWith(
+                      colorScheme: theme.colorScheme.copyWith(
+                        primary: theme.appPrimary,
+                      ),
+                    ),
+                    child: child!,
+                  ),
+                );
+                if (picked != null) apply(picked.start, picked.end);
+              }),
+              if (_dateRange != null)
+                option(Icons.close_rounded, 'Clear date filter', () {
+                  Navigator.pop(sheetContext);
+                  setState(() => _dateRange = null);
+                  _loadNews();
+                }),
+              const SizedBox(height: 8),
+            ],
           ),
-          child: child!,
         );
       },
     );
-    if (picked != null) {
-      setState(() => _dateRange = picked);
-    }
   }
 
   Future<void> _updateStatus(News news, String newStatus) async {

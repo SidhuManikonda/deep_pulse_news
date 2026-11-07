@@ -40,6 +40,22 @@ abstract class NewsRepository {
     int? topicId,
     String? search,
     int? authorId,
+
+    /// Narrows to articles filed on or after [fromDate] and on or before
+    /// [toDate], server-side, as `from_date` / `to_date` (`YYYY-MM-DD`).
+    ///
+    /// Filtering here rather than in the screen because the list is paged:
+    /// the admin screen holds 20 of ~4,900 articles, so a local filter can
+    /// only ever match within that page and any older date looks empty.
+    DateTime? fromDate,
+    DateTime? toDate,
+
+    /// Narrows the feed to one mandal, server-side, via `mandal_id`.
+    ///
+    /// The only location filter the API honours: `district_id` and `state_id`
+    /// are accepted and silently ignored (they come back with the unfiltered
+    /// feed), while an unknown mandal 404s — so this one really is resolved.
+    int? mandalId,
   });
 
   /// The same endpoint as [getNews], but keeping the standalone adverts the
@@ -81,6 +97,9 @@ class NewsRepositoryImpl implements NewsRepository {
     int? topicId,
     String? search,
     int? authorId,
+    DateTime? fromDate,
+    DateTime? toDate,
+    int? mandalId,
   }) async {
     try {
       final queryParams = <String, String>{};
@@ -102,12 +121,46 @@ class NewsRepositoryImpl implements NewsRepository {
       if (authorId != null) {
         queryParams['author_id'] = authorId.toString();
       }
+      if (mandalId != null) {
+        queryParams['mandal_id'] = mandalId.toString();
+      }
+      // Dates only, no clock: the endpoint filters by day, and sending a
+      // timestamp would make "today" depend on the device's timezone.
+      String ymd(DateTime d) =>
+          '${d.year.toString().padLeft(4, '0')}-'
+          '${d.month.toString().padLeft(2, '0')}-'
+          '${d.day.toString().padLeft(2, '0')}';
+      if (fromDate != null) {
+        queryParams['from_date'] = ymd(fromDate);
+      }
+      if (toDate != null) {
+        queryParams['to_date'] = ymd(toDate);
+      }
 
       final response = await _apiService.get(
         AppConstants.news,
         queryParameters: queryParams,
         useAuth: userId != null,
+        // A filter that matches nothing is a normal answer, not a failure.
+        // The endpoint reports "no news found" as an error status, which
+        // popped a red "Request Failed" banner over an empty list — so the
+        // alert is suppressed here and the empty result handled below.
+        showErrorAlert: false,
       );
+
+      // Nothing matched: return an empty page rather than letting the caller
+      // treat it as a broken request.
+      if (response is Map && response.containsKey('error')) {
+        debugPrint(
+          '[NewsRepo] getNews non-200: status=${response['statusCode']} '
+          'looksEmpty=${_looksEmpty(response)} body=${response['message']}',
+        );
+      }
+      if (response is Map && _looksEmpty(response)) {
+        // Growable, not `const []`: callers sort the list they get back, and
+        // sorting a const list throws "Cannot modify an unmodifiable list".
+        return PaginatedResponse(data: <News>[], perPage: 0, hasMore: false);
+      }
 
       if (response is Map<String, dynamic> && response.containsKey('data')) {
         return PaginatedResponse.fromJson(
@@ -127,7 +180,8 @@ class NewsRepositoryImpl implements NewsRepository {
         perPage: newsData.length,
         hasMore: false,
       );
-    } catch (e) {
+    } catch (e, stack) {
+      debugPrint('[NewsRepo] getNews threw: $e\n$stack');
       throw Exception('Failed to fetch news: $e');
     }
   }
@@ -197,16 +251,8 @@ class NewsRepositoryImpl implements NewsRepository {
           // filtered the articles. If the payload omits it, borrow the time of
           // the article it arrived after, so the ad still lands there rather
           // than sinking to the bottom of the feed.
-          if (ad.updatedAt == null && news.isNotEmpty) {
-            ad = FeedAd(
-              id: ad.id,
-              url: ad.url,
-              mediaType: ad.mediaType,
-              locations: ad.locations,
-              status: ad.status,
-              isDeleted: ad.isDeleted,
-              updatedAt: news.last.displayTime,
-            );
+          if (ad.feedTime == null && news.isNotEmpty) {
+            ad = ad.withFeedTime(news.last.displayTime);
           }
           ads.add(ad);
         }
@@ -253,6 +299,29 @@ class NewsRepositoryImpl implements NewsRepository {
       // to avoid a doubled-up message.
       rethrow;
     }
+  }
+
+  /// True when the endpoint's reply means "nothing matched" rather than
+  /// "something went wrong".
+  ///
+  /// It answers an empty filter with an error-shaped body whose message is
+  /// some wording of "no news found", so the two have to be told apart by the
+  /// message rather than by the status alone.
+  static bool _looksEmpty(Map response) {
+    if (!response.containsKey('error') && !response.containsKey('message')) {
+      return false;
+    }
+    // A list endpoint answering 404 means "nothing matched" — which is an
+    // answer, not a fault. Checked before the wording so it holds whatever
+    // phrasing the backend uses.
+    final status = response['statusCode'];
+    if (status is int && status == 404) return true;
+    final text = '${response['message'] ?? ''} ${response['error'] ?? ''}'
+        .toLowerCase();
+    return text.contains('no news') ||
+        text.contains('not found') ||
+        text.contains('no records') ||
+        text.contains('no data');
   }
 
   @override
@@ -367,7 +436,10 @@ class NewsRepositoryImpl implements NewsRepository {
       debugPrint(
         '[NewsRepo] POST /news/$id fields: is_important=${fields['is_important']}, '
         'is_comment=${fields['is_comment']}, '
-        'show_profile=${fields['show_profile']}, status=${fields['status']}',
+        'show_profile=${fields['show_profile']}, status=${fields['status']}, '
+        'remove_ad_1=${fields['remove_ad_1']}, '
+        'remove_ad_2=${fields['remove_ad_2']}, '
+        'delete_media_ids=${fields.keys.where((k) => k.startsWith('delete_media_ids')).map((k) => fields[k]).join(',')}',
       );
 
       final response = await _apiService.postMultipart(

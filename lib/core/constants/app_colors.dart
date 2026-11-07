@@ -6,8 +6,8 @@ extension AppColorsExtension on ThemeData {
   bool get _isLight => brightness == Brightness.light;
 
   // Primary Colors (same for both themes)
-  Color get appPrimary => const Color(0xFF2563EB);      // Premium Vivid Blue
-  Color get appPrimaryDark => const Color(0xFF1D4ED8);  // Deeper Blue
+  Color get appPrimary => const Color(0xFF2563EB); // Premium Vivid Blue
+  Color get appPrimaryDark => const Color(0xFF1D4ED8); // Deeper Blue
   Color get appPrimaryLight => const Color(0xFF93C5FD); // Soft Blue
 
   // Background Colors (theme-aware)
@@ -76,7 +76,8 @@ extension AppColorsExtension on ThemeData {
       _isLight ? const Color(0xFF718096) : const Color(0xFFA0AEC0);
 
   // Card Colors (theme-aware)
-  Color get appCard => _isLight ? const Color(0xFFF7FAFC) : const Color(0xFF1A1A1A);
+  Color get appCard =>
+      _isLight ? const Color(0xFFF7FAFC) : const Color(0xFF1A1A1A);
 
   // Shimmer Colors (theme-aware)
   Color get shimmerBaseColor =>
@@ -87,14 +88,15 @@ extension AppColorsExtension on ThemeData {
       _isLight ? const Color(0xFF2196F3) : const Color(0xFF2196F3);
 
   // Divider Colors (theme-aware)
-  Color get appDivider => _isLight ? const Color(0xFFE5E7EB) : const Color(0xFF4B5563);
+  Color get appDivider =>
+      _isLight ? const Color(0xFFE5E7EB) : const Color(0xFF4B5563);
 }
 
 //------------------------------------------------------------------------------
 // Light Theme Color Constants
 //------------------------------------------------------------------------------
-const Color appPrimaryLightColor = Color(0xFF2563EB);      // Premium Vivid Blue
-const Color appPrimaryDarkLightColor = Color(0xFF1D4ED8);  // Deeper Blue
+const Color appPrimaryLightColor = Color(0xFF2563EB); // Premium Vivid Blue
+const Color appPrimaryDarkLightColor = Color(0xFF1D4ED8); // Deeper Blue
 const Color appPrimaryLightLightColor = Color(0xFF93C5FD); // Soft Blue
 const Color appBackgroundLightColor = Color(0xFFFFFFFF);
 const Color appSurfaceLightColor = Color(0xFFF7FAFC);
@@ -168,9 +170,9 @@ const Color appLifestyleColor = Color(0xFFED8936);
 // Semantic Alert Colors (always on dark/colored backgrounds — not theme-aware)
 //------------------------------------------------------------------------------
 const Color appAlertSuccessColor = Color(0xFF16A34A);
-const Color appAlertErrorColor   = Color(0xFFDC2626);
-const Color appAlertWarningColor  = Color(0xFFD97706);
-const Color appAlertInfoColor     = Color(0xFF2563EB);
+const Color appAlertErrorColor = Color(0xFFDC2626);
+const Color appAlertWarningColor = Color(0xFFD97706);
+const Color appAlertInfoColor = Color(0xFF2563EB);
 
 //------------------------------------------------------------------------------
 // Primary Gradient — use Theme.of(context).primaryGradient
@@ -209,3 +211,16 @@ extension AppGradientExtension on ThemeData {
     stops: [0.0, 0.45, 1.0],
   );
 }
+
+/// Colours for the article reaction row — like, dislike, comment, share.
+///
+/// Shared so the feed card and the article screen tint the same action the same
+/// way. They were previously private to the feed card, which is why the article
+/// screen's row came out grey.
+///
+/// Fixed rather than theme-derived: these read as the action's own identity
+/// (a green share, a red dislike) and should not shift with the palette.
+const Color kReactionLikeColor = Color(0xFF1E88E5); // blue
+const Color kReactionDislikeColor = Color(0xFFE53935); // red
+const Color kReactionCommentColor = Color(0xFF8E24AA); // purple
+const Color kReactionShareColor = Color(0xFF43A047); // green

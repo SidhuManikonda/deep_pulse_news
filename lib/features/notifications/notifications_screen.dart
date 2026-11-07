@@ -53,15 +53,17 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
     if (!notif.isRead) {
       setState(() {
         _items = _items
-            .map((n) => n.id == notif.id
-                ? AppNotification(
-                    id: n.id,
-                    type: n.type,
-                    data: n.data,
-                    readAt: DateTime.now(),
-                    createdAt: n.createdAt,
-                  )
-                : n)
+            .map(
+              (n) => n.id == notif.id
+                  ? AppNotification(
+                      id: n.id,
+                      type: n.type,
+                      data: n.data,
+                      readAt: DateTime.now(),
+                      createdAt: n.createdAt,
+                    )
+                  : n,
+            )
             .toList();
       });
       _notifRepo.markAsRead(notif.id);
@@ -97,15 +99,17 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
       final now = DateTime.now();
       setState(() {
         _items = _items
-            .map((n) => n.isRead
-                ? n
-                : AppNotification(
-                    id: n.id,
-                    type: n.type,
-                    data: n.data,
-                    readAt: now,
-                    createdAt: n.createdAt,
-                  ))
+            .map(
+              (n) => n.isRead
+                  ? n
+                  : AppNotification(
+                      id: n.id,
+                      type: n.type,
+                      data: n.data,
+                      readAt: now,
+                      createdAt: n.createdAt,
+                    ),
+            )
             .toList();
         _isMarkingAll = false;
       });
@@ -144,10 +148,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
             if (unreadCount > 0) ...[
               const SizedBox(width: 8),
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 2,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
                   color: theme.appPrimary,
                   borderRadius: BorderRadius.circular(10),
@@ -190,10 +191,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
             ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _load,
-        child: _buildBody(theme),
-      ),
+      body: RefreshIndicator(onRefresh: _load, child: _buildBody(theme)),
     );
   }
 
@@ -400,8 +398,9 @@ class _NotificationCard extends StatelessWidget {
                               fontSize: scaledFontSize(14),
                               // Bold while unread, lighter once opened — the
                               // main at-a-glance cue for what's already seen.
-                              fontWeight:
-                                  unread ? FontWeight.w700 : FontWeight.w500,
+                              fontWeight: unread
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
                               color: unread
                                   ? theme.appTextPrimary
                                   : theme.appTextSecondary,

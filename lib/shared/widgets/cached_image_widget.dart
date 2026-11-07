@@ -1,5 +1,3 @@
-import 'dart:ui' as ui;
-
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
@@ -9,12 +7,22 @@ class CachedImageWidget extends StatelessWidget {
   final Widget? placeholder;
   final Widget? errorWidget;
 
+  /// Width, in device pixels, to decode the image at. 1080 is right for a
+  /// phone screen and keeps the image cache small.
+  ///
+  /// Raise it where the result is captured rather than looked at — the epaper
+  /// poster rasterises itself at up to 3×, so an image decoded for the screen
+  /// gets enlarged threefold in the saved PNG and turns to mush the moment
+  /// anyone zooms in. Null decodes at the source's own resolution.
+  final int? decodeWidth;
+
   const CachedImageWidget({
     super.key,
     required this.imageUrl,
     this.fit = BoxFit.cover,
     this.placeholder,
     this.errorWidget,
+    this.decodeWidth = 1080,
   });
 
   @override
@@ -26,7 +34,7 @@ class CachedImageWidget extends StatelessWidget {
       // memCacheHeight makes ResizeImage (policy: exact) force the image into
       // those exact dimensions, distorting/stretching the aspect ratio.
       // Constraining width alone keeps the original aspect ratio intact.
-      memCacheWidth: 1080,
+      memCacheWidth: decodeWidth,
       fadeInDuration: const Duration(milliseconds: 200),
       fadeOutDuration: const Duration(milliseconds: 200),
       placeholder: (context, url) =>
@@ -46,11 +54,7 @@ class CachedImageWidget extends StatelessWidget {
           Container(
             color: Colors.grey[300],
             child: Center(
-              child: Icon(
-                Icons.image,
-                size: 64,
-                color: Colors.grey[600],
-              ),
+              child: Icon(Icons.image, size: 64, color: Colors.grey[600]),
             ),
           ),
     );
@@ -92,6 +96,11 @@ class AdaptiveCachedImage extends StatefulWidget {
   /// the screen — useful for tall portrait images in a scrolling feed.
   final double? maxHeight;
 
+  /// Width, in device pixels, to decode at. See
+  /// [CachedImageWidget.decodeWidth] — the poster raises it because it captures
+  /// itself at up to 3× and a screen-sized decode is soft at that scale.
+  final int? decodeWidth;
+
   /// How the (sharp foreground) image is fit inside its box.
   /// [BoxFit.contain] shows the whole image (may letterbox / look thin for a
   /// portrait in a short box); [BoxFit.cover] fills the box width fully but
@@ -109,6 +118,7 @@ class AdaptiveCachedImage extends StatefulWidget {
     this.maxHeight,
     this.blurredBackground = false,
     this.fit = BoxFit.contain,
+    this.decodeWidth = 1080,
   });
 
   @override
@@ -116,15 +126,39 @@ class AdaptiveCachedImage extends StatefulWidget {
 }
 
 class _AdaptiveCachedImageState extends State<AdaptiveCachedImage> {
+  /// Decode width for the blurred letterbox copy.
+  ///
+  /// The backdrop only ever reads as a wash of colour, so it's decoded at
+  /// thumbnail size and stretched to fill. Bilinear upscaling from 48px *is*
+  /// the blur — and it costs nothing, where the `ImageFiltered` gaussian this
+  /// replaces ran a full-size blur over the whole card on every single frame.
+  /// With two cards live during a feed swipe that was two per-frame blurs, and
+  /// it is the most expensive thing the feed drew.
+  static const int _backdropDecodeWidth = 48;
+
   double? _aspectRatio;
   ImageStream? _stream;
   ImageStreamListener? _listener;
   late CachedNetworkImageProvider _provider;
+  CachedNetworkImageProvider? _backdropProvider;
 
   @override
   void initState() {
     super.initState();
-    _provider = CachedNetworkImageProvider(widget.imageUrl, maxWidth: 1080);
+    _buildProviders();
+  }
+
+  void _buildProviders() {
+    _provider = CachedNetworkImageProvider(
+      widget.imageUrl,
+      maxWidth: widget.decodeWidth,
+    );
+    _backdropProvider = widget.blurredBackground
+        ? CachedNetworkImageProvider(
+            widget.imageUrl,
+            maxWidth: _backdropDecodeWidth,
+          )
+        : null;
   }
 
   @override
@@ -136,9 +170,10 @@ class _AdaptiveCachedImageState extends State<AdaptiveCachedImage> {
   @override
   void didUpdateWidget(covariant AdaptiveCachedImage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.imageUrl != widget.imageUrl) {
+    if (oldWidget.imageUrl != widget.imageUrl ||
+        oldWidget.blurredBackground != widget.blurredBackground) {
       _aspectRatio = null;
-      _provider = CachedNetworkImageProvider(widget.imageUrl, maxWidth: 1080);
+      _buildProviders();
       _resolveAspectRatio();
     }
   }
@@ -184,9 +219,7 @@ class _AdaptiveCachedImageState extends State<AdaptiveCachedImage> {
       gaplessPlayback: true,
       errorBuilder: (context, error, stackTrace) =>
           widget.errorWidget ??
-          Center(
-            child: Icon(Icons.image, size: 64, color: Colors.grey[600]),
-          ),
+          Center(child: Icon(Icons.image, size: 64, color: Colors.grey[600])),
     );
 
     final image = widget.blurredBackground
@@ -197,17 +230,20 @@ class _AdaptiveCachedImageState extends State<AdaptiveCachedImage> {
               // light-grey of the parent while the blur layer is decoding.
               const ColoredBox(color: Color(0xFF1A1A1A)),
               // Blurred, zoomed copy of the same image fills the letterbox.
-              ImageFiltered(
-                imageFilter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                child: Image(
-                  image: _provider,
-                  fit: BoxFit.cover,
-                  width: double.infinity,
-                  height: double.infinity,
-                  gaplessPlayback: true,
-                  // No error widget here — the foreground already handles it.
-                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-                ),
+              // The blur is the 48px decode being stretched to fill, not a
+              // filter — see [_backdropDecodeWidth]. Same look, and the feed
+              // stops paying for a gaussian on every frame it scrolls.
+              Image(
+                image: _backdropProvider ?? _provider,
+                fit: BoxFit.cover,
+                width: double.infinity,
+                height: double.infinity,
+                gaplessPlayback: true,
+                // Bilinear on the upscale is what smooths the thumbnail into a
+                // wash; `none` would show it as visible blocks.
+                filterQuality: FilterQuality.low,
+                // No error widget here — the foreground already handles it.
+                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
               ),
               // Slight dim so the sharp foreground image stays the focus.
               Container(color: Colors.black.withValues(alpha: 0.15)),
@@ -226,11 +262,7 @@ class _AdaptiveCachedImageState extends State<AdaptiveCachedImage> {
           final height = naturalHeight > widget.maxHeight!
               ? widget.maxHeight!
               : naturalHeight;
-          return SizedBox(
-            width: double.infinity,
-            height: height,
-            child: image,
-          );
+          return SizedBox(width: double.infinity, height: height, child: image);
         },
       );
     }

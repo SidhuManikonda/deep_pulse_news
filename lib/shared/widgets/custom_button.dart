@@ -14,6 +14,7 @@ class CustomButton extends StatelessWidget {
   final double height;
   final double borderRadius;
   final IconData? icon;
+
   /// Use a diagonal gradient instead of a flat background.
   /// Ignored when [isOutlined] is true or [backgroundColor] is explicitly set.
   final bool useGradient;
@@ -65,9 +66,7 @@ class CustomButton extends StatelessWidget {
         height: height,
         child: DecoratedBox(
           decoration: BoxDecoration(
-            gradient: onPressed != null
-                ? theme.primaryGradient
-                : null,
+            gradient: onPressed != null ? theme.primaryGradient : null,
             color: onPressed == null ? theme.appGrey200 : null,
             borderRadius: radius,
           ),
@@ -110,7 +109,8 @@ class CustomButton extends StatelessWidget {
   Widget _content(BuildContext context, Color iconColor) {
     if (isLoading) {
       return SizedBox(
-        width: 20, height: 20,
+        width: 20,
+        height: 20,
         child: CircularProgressIndicator(
           strokeWidth: 2,
           valueColor: AlwaysStoppedAnimation<Color>(iconColor),

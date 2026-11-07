@@ -2,7 +2,8 @@ import 'package:video_player/video_player.dart';
 import 'package:flutter/material.dart';
 
 class VideoPreloaderService {
-  static final VideoPreloaderService _instance = VideoPreloaderService._internal();
+  static final VideoPreloaderService _instance =
+      VideoPreloaderService._internal();
   factory VideoPreloaderService() => _instance;
   VideoPreloaderService._internal();
 
@@ -40,7 +41,9 @@ class VideoPreloaderService {
     return _createAndInitController(videoUrl);
   }
 
-  Future<VideoPlayerController?> _createAndInitController(String videoUrl) async {
+  Future<VideoPlayerController?> _createAndInitController(
+    String videoUrl,
+  ) async {
     final controller = VideoPlayerController.networkUrl(
       Uri.parse(videoUrl),
       httpHeaders: const {'Connection': 'keep-alive'},
@@ -64,7 +67,8 @@ class VideoPreloaderService {
   }
 
   Future<void> preloadVideo(String videoUrl) async {
-    if (_controllers.containsKey(videoUrl) && _initializationStatus[videoUrl] == true) {
+    if (_controllers.containsKey(videoUrl) &&
+        _initializationStatus[videoUrl] == true) {
       return;
     }
 

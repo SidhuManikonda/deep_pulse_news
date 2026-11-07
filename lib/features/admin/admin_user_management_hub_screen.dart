@@ -47,7 +47,10 @@ class _AdminUserManagementHubScreenState
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final controller = ref.read(adminUserManagementControllerProvider);
-      controller.fetchUsers(authRepository: ref.read(authRepositoryProvider), forceRefresh: true);
+      controller.fetchUsers(
+        authRepository: ref.read(authRepositoryProvider),
+        forceRefresh: true,
+      );
       controller.fetchRoles(authRepository: ref.read(authRepositoryProvider));
       final locationVM = ref.read(locationViewModelProvider);
       if (locationVM.states.isEmpty && !locationVM.isLoadingStates) {
@@ -55,8 +58,12 @@ class _AdminUserManagementHubScreenState
       }
       // Sub-admin: auto-set state filter and load districts
       final user = ref.read(authViewModelProvider).user;
-      debugPrint('🔍 HUB INIT: role=${user?.primaryRole.value}, stateId=${user?.stateId}, roles=${user?.roles?.map((r) => "${r.name}(${r.slug})").toList()}');
-      if (user != null && user.primaryRole.value == 'sub_admin' && user.stateId != null) {
+      debugPrint(
+        '🔍 HUB INIT: role=${user?.primaryRole.value}, stateId=${user?.stateId}, roles=${user?.roles?.map((r) => "${r.name}(${r.slug})").toList()}',
+      );
+      if (user != null &&
+          user.primaryRole.value == 'sub_admin' &&
+          user.stateId != null) {
         setState(() {
           _selectedStateFilter = user.stateId;
         });
@@ -189,7 +196,9 @@ class _AdminUserManagementHubScreenState
 
     // Exclude current user from the list
     final currentUserId = currentUser?.id;
-    var filteredUsers = users.where((u) => u.userId != currentUserId && u.id != currentUserId).toList();
+    var filteredUsers = users
+        .where((u) => u.userId != currentUserId && u.id != currentUserId)
+        .toList();
 
     if (_searchQuery.trim().isNotEmpty) {
       final q = _searchQuery.toLowerCase();
@@ -218,7 +227,9 @@ class _AdminUserManagementHubScreenState
     }
 
     if (_selectedStateFilter != null) {
-      debugPrint('🔍 STATE FILTER: stateFilter=$_selectedStateFilter, before=${filteredUsers.length}, stateIds=${filteredUsers.map((u) => u.stateId).toSet().toList()}');
+      debugPrint(
+        '🔍 STATE FILTER: stateFilter=$_selectedStateFilter, before=${filteredUsers.length}, stateIds=${filteredUsers.map((u) => u.stateId).toSet().toList()}',
+      );
       filteredUsers = filteredUsers
           .where((u) => u.stateId == _selectedStateFilter)
           .toList();
@@ -236,10 +247,14 @@ class _AdminUserManagementHubScreenState
     }
 
     // Counts based on role scope (excluding current user), not affected by search/filter chips
-    var scopedUsers = users.where((u) => u.userId != currentUserId && u.id != currentUserId).toList();
+    var scopedUsers = users
+        .where((u) => u.userId != currentUserId && u.id != currentUserId)
+        .toList();
     // Sub-admin: only count users in their state
     if (!isAdmin && currentUser?.stateId != null) {
-      scopedUsers = scopedUsers.where((u) => u.stateId == currentUser!.stateId).toList();
+      scopedUsers = scopedUsers
+          .where((u) => u.stateId == currentUser!.stateId)
+          .toList();
     }
     final totalCount = scopedUsers.length;
     final staffCount = scopedUsers
@@ -439,37 +454,38 @@ class _AdminUserManagementHubScreenState
                             padding: const EdgeInsets.symmetric(horizontal: 16),
                             children: [
                               if (isAdmin)
-                              _buildLocationChip<location_models.State>(
-                                label: _selectedStateObj?.name ?? 'All States',
-                                icon: Icons.map_outlined,
-                                isSelected: _selectedStateFilter != null,
-                                items: locationVM.states,
-                                getName: (s) => s.name,
-                                onSelected: (s) {
-                                  setState(() {
-                                    _selectedStateFilter = s.id;
-                                    _selectedStateObj = s;
-                                    _selectedDistrictFilter = null;
-                                    _selectedDistrictObj = null;
-                                    _selectedMandalFilter = null;
-                                    _selectedMandalObj = null;
-                                  });
-                                  ref
-                                      .read(locationViewModelProvider)
-                                      .loadDistricts(s.id);
-                                },
-                                onClear: () {
-                                  setState(() {
-                                    _selectedStateFilter = null;
-                                    _selectedStateObj = null;
-                                    _selectedDistrictFilter = null;
-                                    _selectedDistrictObj = null;
-                                    _selectedMandalFilter = null;
-                                    _selectedMandalObj = null;
-                                  });
-                                },
-                                theme: theme,
-                              ),
+                                _buildLocationChip<location_models.State>(
+                                  label:
+                                      _selectedStateObj?.name ?? 'All States',
+                                  icon: Icons.map_outlined,
+                                  isSelected: _selectedStateFilter != null,
+                                  items: locationVM.states,
+                                  getName: (s) => s.name,
+                                  onSelected: (s) {
+                                    setState(() {
+                                      _selectedStateFilter = s.id;
+                                      _selectedStateObj = s;
+                                      _selectedDistrictFilter = null;
+                                      _selectedDistrictObj = null;
+                                      _selectedMandalFilter = null;
+                                      _selectedMandalObj = null;
+                                    });
+                                    ref
+                                        .read(locationViewModelProvider)
+                                        .loadDistricts(s.id);
+                                  },
+                                  onClear: () {
+                                    setState(() {
+                                      _selectedStateFilter = null;
+                                      _selectedStateObj = null;
+                                      _selectedDistrictFilter = null;
+                                      _selectedDistrictObj = null;
+                                      _selectedMandalFilter = null;
+                                      _selectedMandalObj = null;
+                                    });
+                                  },
+                                  theme: theme,
+                                ),
                               if (_selectedStateFilter != null)
                                 _buildLocationChip<District>(
                                   label:
@@ -1155,7 +1171,9 @@ class _AdminUserManagementHubScreenState
             final slug =
                 role.slug?.toLowerCase() ??
                 role.name.toLowerCase().replaceAll(' ', '_');
-            return slug != 'admin' && slug != 'sub_admin' && slug != 'sub-admin';
+            return slug != 'admin' &&
+                slug != 'sub_admin' &&
+                slug != 'sub-admin';
           }).toList()
         : controller.roles;
 
@@ -1296,19 +1314,14 @@ class _AdminUserManagementHubScreenState
     );
 
     if (success) {
-      await controller.fetchUsers(
-        authRepository: authRepo,
-        forceRefresh: true,
-      );
+      await controller.fetchUsers(authRepository: authRepo, forceRefresh: true);
     }
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            success
-                ? '${user.name}\'s role updated'
-                : 'Failed to update role',
+            success ? '${user.name}\'s role updated' : 'Failed to update role',
           ),
           backgroundColor: success ? Colors.green[600] : Colors.red[600],
           behavior: SnackBarBehavior.floating,
@@ -1324,7 +1337,7 @@ class _AdminUserManagementHubScreenState
   /// null if the admin cancels. State/district/mandal are all required —
   /// the backend's PUT /user/{id} rejects partial location data.
   Future<({int stateId, int districtId, int mandalId})?>
-      _showAssignLocationSheet(User user, Role newRole) async {
+  _showAssignLocationSheet(User user, Role newRole) async {
     final locationVM = ref.read(locationViewModelProvider);
 
     // Preload states. Districts/mandals come later based on the picked state.
@@ -1365,7 +1378,8 @@ class _AdminUserManagementHubScreenState
                 .where((m) => m.id == pickedMandalId)
                 .firstOrNull;
 
-            final canSubmit = pickedStateId != null &&
+            final canSubmit =
+                pickedStateId != null &&
                 pickedDistrictId != null &&
                 pickedMandalId != null;
 
@@ -1439,7 +1453,8 @@ class _AdminUserManagementHubScreenState
                     _LocationField(
                       label: 'District',
                       icon: Icons.location_city_outlined,
-                      valueText: pickedDistrict?.name ??
+                      valueText:
+                          pickedDistrict?.name ??
                           (pickedStateId == null
                               ? 'Pick state first'
                               : 'Choose district'),
@@ -1464,7 +1479,8 @@ class _AdminUserManagementHubScreenState
                     _LocationField(
                       label: 'Mandal',
                       icon: Icons.place_outlined,
-                      valueText: pickedMandal?.name ??
+                      valueText:
+                          pickedMandal?.name ??
                           (pickedDistrictId == null
                               ? 'Pick district first'
                               : 'Choose mandal'),
@@ -1486,14 +1502,11 @@ class _AdminUserManagementHubScreenState
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed: canSubmit
-                            ? () => Navigator.pop(
-                                  ctx,
-                                  (
-                                    stateId: pickedStateId!,
-                                    districtId: pickedDistrictId!,
-                                    mandalId: pickedMandalId!,
-                                  ),
-                                )
+                            ? () => Navigator.pop(ctx, (
+                                stateId: pickedStateId!,
+                                districtId: pickedDistrictId!,
+                                mandalId: pickedMandalId!,
+                              ))
                             : null,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: theme.appPrimary,
@@ -1767,7 +1780,7 @@ class _AdminUserManagementHubScreenState
       final controller = ref.read(adminUserManagementControllerProvider);
       final success = await controller.deleteUser(
         authRepository: ref.read(authRepositoryProvider),
-        userId: user.id ,
+        userId: user.id,
       );
       if (success) {
         controller.fetchUsers(
@@ -1829,10 +1842,7 @@ class _AdminUserManagementHubScreenState
 
     if (success) {
       final controller = ref.read(adminUserManagementControllerProvider);
-      await controller.fetchUsers(
-        authRepository: authRepo,
-        forceRefresh: true,
-      );
+      await controller.fetchUsers(authRepository: authRepo, forceRefresh: true);
     }
 
     if (mounted) {
@@ -1840,7 +1850,9 @@ class _AdminUserManagementHubScreenState
         SnackBar(
           content: Text(
             success
-                ? (isBlocked ? '${user.name} unblocked' : '${user.name} blocked')
+                ? (isBlocked
+                      ? '${user.name} unblocked'
+                      : '${user.name} blocked')
                 : 'Failed to update block status',
           ),
           backgroundColor: success ? Colors.green[600] : Colors.red[600],
@@ -2069,7 +2081,9 @@ class _UserCard extends StatelessWidget {
                               ? Icons.lock_open
                               : Icons.block,
                           label: user.isBlockedByAdmin ? 'Unblock' : 'Block',
-                          color: user.isBlockedByAdmin ? Colors.green : Colors.orange,
+                          color: user.isBlockedByAdmin
+                              ? Colors.green
+                              : Colors.orange,
                           onTap: onToggleBlock!,
                         ),
                       _buildActionChip(

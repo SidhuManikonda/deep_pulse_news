@@ -98,19 +98,27 @@ class AlertPopupManager {
 
   Color _colorFor(AlertType type) {
     switch (type) {
-      case AlertType.success: return appAlertSuccessColor;
-      case AlertType.error:   return appAlertErrorColor;
-      case AlertType.warning: return appAlertWarningColor;
-      case AlertType.info:    return appAlertInfoColor;
+      case AlertType.success:
+        return appAlertSuccessColor;
+      case AlertType.error:
+        return appAlertErrorColor;
+      case AlertType.warning:
+        return appAlertWarningColor;
+      case AlertType.info:
+        return appAlertInfoColor;
     }
   }
 
   IconData _iconFor(AlertType type) {
     switch (type) {
-      case AlertType.success: return Icons.check_circle_rounded;
-      case AlertType.error:   return Icons.error_rounded;
-      case AlertType.warning: return Icons.warning_rounded;
-      case AlertType.info:    return Icons.info_rounded;
+      case AlertType.success:
+        return Icons.check_circle_rounded;
+      case AlertType.error:
+        return Icons.error_rounded;
+      case AlertType.warning:
+        return Icons.warning_rounded;
+      case AlertType.info:
+        return Icons.info_rounded;
     }
   }
 

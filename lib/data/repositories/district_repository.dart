@@ -18,7 +18,11 @@ class DistrictRepositoryImpl implements DistrictRepository {
   @override
   Future<List<District>> getDistrictsByState(int stateId) async {
     try {
-      final response = await _apiService.get('${AppConstants.districts}/$stateId', useAuth: false, showErrorAlert: false);
+      final response = await _apiService.get(
+        '${AppConstants.districts}/$stateId',
+        useAuth: false,
+        showErrorAlert: false,
+      );
 
       if (response.containsKey('error')) {
         throw Exception(response['error']);
@@ -31,7 +35,9 @@ class DistrictRepositoryImpl implements DistrictRepository {
         final stateObj = stateData[0];
         if (stateObj.containsKey('districts')) {
           final districtsData = stateObj['districts'] as List<dynamic>;
-          return districtsData.map((districtJson) => District.fromJson(districtJson)).toList();
+          return districtsData
+              .map((districtJson) => District.fromJson(districtJson))
+              .toList();
         }
       }
 
@@ -44,7 +50,10 @@ class DistrictRepositoryImpl implements DistrictRepository {
   @override
   Future<District?> getDistrictById(int id) async {
     try {
-      final response = await _apiService.get('${AppConstants.districts}/$id', useAuth: false);
+      final response = await _apiService.get(
+        '${AppConstants.districts}/$id',
+        useAuth: false,
+      );
 
       if (response.containsKey('error')) {
         throw Exception(response['error']);

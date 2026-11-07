@@ -1,4 +1,5 @@
 import 'package:deep_pulse_news/shared/widgets/app_logo.dart';
+import 'package:deep_pulse_news/shared/widgets/app_wordmark.dart';
 import 'package:deep_pulse_news/shared/widgets/custom_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,6 +12,7 @@ import '../../core/services/saved_news_service.dart';
 import '../../core/services/video_preloader_service.dart';
 import '../../data/models/likeable_type.dart';
 import '../../data/models/news.dart';
+import '../../data/models/news_ad.dart';
 import '../../data/models/news_media.dart';
 import '../../data/repositories/news_repository.dart';
 import '../../extensions/user_extensions.dart';
@@ -238,23 +240,9 @@ class _NewsDetailScreenV2State extends ConsumerState<NewsDetailScreenV2> {
               theme: theme,
               isLight: isLight,
             ),
-            // Center-left: app branding so the bar isn't a blank strip.
-            title: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                AppLogo(size: 26, borderRadius: 6),
-                const SizedBox(width: 8),
-                Text(
-                  'Deep Pulse',
-                  style: TextStyle(
-                    fontSize: scaledFontSize(16),
-                    fontWeight: FontWeight.w800,
-                    color: theme.appTextPrimary,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-              ],
-            ),
+            // Center-left: app branding so the bar isn't a blank strip. The
+            // wordmark already carries the name, so no Text beside it.
+            title: const AppWordmark(height: 30, borderRadius: 7),
             actions: [
               // Guests get a login CTA right where the empty space was — turns
               // dead space into an invitation to join.
@@ -336,12 +324,11 @@ class _NewsDetailScreenV2State extends ConsumerState<NewsDetailScreenV2> {
                     const SizedBox(height: 20),
                   ],
 
-                  // First ad sits between the summary and the full article —
-                  // the natural pause in the read, and the placement every
-                  // major news app uses. Never above the headline, and never
-                  // mid-sentence.
-                  if (_newsItem.ads.isNotEmpty) ...[
-                    NewsAdBlock(ad:_newsItem.ads.first),
+                  // Ad 1's place: between the summary and the full text — the
+                  // natural pause in the read, and where every major news app
+                  // puts one. Never above the headline, never mid-sentence.
+                  if (_adInSlot(1) case final ad?) ...[
+                    NewsAdBlock(ad: ad),
                     const SizedBox(height: 20),
                   ],
 
@@ -360,10 +347,10 @@ class _NewsDetailScreenV2State extends ConsumerState<NewsDetailScreenV2> {
                     ),
                     const SizedBox(height: 24),
                   ],
-                  // Second ad closes the article, after the reader has the
-                  // whole story.
-                  if (_newsItem.ads.length > 1) ...[
-                    NewsAdBlock(ad:_newsItem.ads[1]),
+                  // Ad 2's place: the bottom, once the reader has the whole
+                  // story.
+                  if (_adInSlot(2) case final ad?) ...[
+                    NewsAdBlock(ad: ad),
                     const SizedBox(height: 24),
                   ],
 
@@ -645,6 +632,19 @@ class _NewsDetailScreenV2State extends ConsumerState<NewsDetailScreenV2> {
     );
   }
 
+  /// The creative booked into an ad place, or null when that place is empty.
+  ///
+  /// Placement follows the slot, not the order the array happens to arrive in:
+  /// ad 1 always runs after the description, ad 2 always closes the article. A
+  /// story carrying only ad 2 therefore shows nothing mid-article rather than
+  /// promoting that creative into a place it wasn't booked for.
+  NewsAd? _adInSlot(int slot) {
+    for (final ad in _newsItem.ads) {
+      if (ad.slot == slot) return ad;
+    }
+    return null;
+  }
+
   /// Roles allowed to see the view counter on an article. Guests (no user) and
   /// the reader/reporter roles are excluded.
   bool get _canSeeViewCount {
@@ -783,21 +783,9 @@ class _NewsDetailScreenV2State extends ConsumerState<NewsDetailScreenV2> {
                 color: Colors.black.withValues(alpha: 0.4),
                 borderRadius: BorderRadius.circular(6),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  AppLogo(size: 16, borderRadius: 4),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Deep Pulse',
-                    style: TextStyle(
-                      fontSize: scaledFontSize(10),
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
+              // The wordmark spells the name itself, so the badge no longer
+              // pairs the square mark with a "Deep Pulse" label.
+              child: const AppWordmark(height: 18, borderRadius: 4),
             ),
           ),
         ),
@@ -887,9 +875,9 @@ class _NewsDetailScreenV2State extends ConsumerState<NewsDetailScreenV2> {
             Consumer(
               builder: (context, ref, child) {
                 final isLiked = _newsItem.isLiked == 1;
-                final likeColor = isLiked
-                    ? const Color(0xFF2563EB)
-                    : theme.appTextSecondary;
+                // Tinted whether or not it is active — the filled/outlined
+                // icon already carries the on/off state.
+                const likeColor = kReactionLikeColor;
                 return _buildInteractionChip(
                   theme,
                   icon: Icons.thumb_up_rounded,
@@ -928,9 +916,7 @@ class _NewsDetailScreenV2State extends ConsumerState<NewsDetailScreenV2> {
             Consumer(
               builder: (context, ref, child) {
                 final isDisliked = _newsItem.isLiked == 0;
-                final dislikeColor = isDisliked
-                    ? theme.appPrimary
-                    : theme.appTextSecondary;
+                const dislikeColor = kReactionDislikeColor;
                 return _buildInteractionChip(
                   theme,
                   icon: Icons.thumb_down_rounded,
@@ -971,7 +957,7 @@ class _NewsDetailScreenV2State extends ConsumerState<NewsDetailScreenV2> {
                 theme,
                 icon: Icons.chat_bubble_rounded,
                 label: _newsItem.commentsCount.toString(),
-                color: theme.appTextSecondary,
+                color: kReactionCommentColor,
                 onTap: () async {
                   final isAuthenticated = await AuthHelper.requireAuth(
                     context,
@@ -1000,7 +986,7 @@ class _NewsDetailScreenV2State extends ConsumerState<NewsDetailScreenV2> {
               theme,
               icon: Icons.share_rounded,
               label: _newsItem.sharesCount.toString(),
-              color: theme.appTextSecondary,
+              color: kReactionShareColor,
               onTap: () async {
                 final isAuthenticated = await AuthHelper.requireAuth(
                   context,

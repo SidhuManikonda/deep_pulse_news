@@ -76,10 +76,10 @@ class _GmailSsoScreenState extends ConsumerState<GmailSsoScreen> {
     ]);
     if (!mounted) return;
     setState(() {
-      _selectedState    = results[0] as location_models.State?;
+      _selectedState = results[0] as location_models.State?;
       _selectedDistrict = results[1] as District?;
-      _selectedMandal   = results[2] as Mandal?;
-      _savedMobile      = results[3] as String?;
+      _selectedMandal = results[2] as Mandal?;
+      _savedMobile = results[3] as String?;
       // Pre-fill the controller in case the user taps "Change"
       if (_savedMobile != null) {
         _mobileController.text = _savedMobile!;
@@ -212,7 +212,8 @@ class _GmailSsoScreenState extends ConsumerState<GmailSsoScreen> {
       try {
         final onboardingManager = OnboardingManager(onboardingStorage);
         final step = await onboardingManager.getCurrentStep();
-        if (mounted) OnboardingNavigator.navigate(context, step, replace: false);
+        if (mounted)
+          OnboardingNavigator.navigate(context, step, replace: false);
       } catch (_) {
         if (mounted) {
           Navigator.pushNamedAndRemoveUntil(
@@ -460,11 +461,15 @@ class _GmailSsoScreenState extends ConsumerState<GmailSsoScreen> {
       if (state == null || !mounted) return;
 
       // District (filtered by state)
-      final districts = await DistrictRepositoryImpl().getDistrictsByState(state.id);
+      final districts = await DistrictRepositoryImpl().getDistrictsByState(
+        state.id,
+      );
       if (!mounted) return;
       if (districts.isEmpty) {
         messenger.showSnackBar(
-          const SnackBar(content: Text('No districts available for this state')),
+          const SnackBar(
+            content: Text('No districts available for this state'),
+          ),
         );
         return;
       }
@@ -473,17 +478,23 @@ class _GmailSsoScreenState extends ConsumerState<GmailSsoScreen> {
         items: districts,
         itemLabel: (d) => d.name,
         // Only pre-select the prior district if the state didn't change
-        selectedId: state.id == _selectedState?.id ? _selectedDistrict?.id : null,
+        selectedId: state.id == _selectedState?.id
+            ? _selectedDistrict?.id
+            : null,
         idOf: (d) => d.id,
       );
       if (district == null || !mounted) return;
 
       // Mandal (filtered by district)
-      final mandals = await MandalRepositoryImpl().getMandalsByDistrict(district.id);
+      final mandals = await MandalRepositoryImpl().getMandalsByDistrict(
+        district.id,
+      );
       if (!mounted) return;
       if (mandals.isEmpty) {
         messenger.showSnackBar(
-          const SnackBar(content: Text('No mandals available for this district')),
+          const SnackBar(
+            content: Text('No mandals available for this district'),
+          ),
         );
         return;
       }
@@ -491,7 +502,9 @@ class _GmailSsoScreenState extends ConsumerState<GmailSsoScreen> {
         title: 'Select Mandal',
         items: mandals,
         itemLabel: (m) => m.name,
-        selectedId: district.id == _selectedDistrict?.id ? _selectedMandal?.id : null,
+        selectedId: district.id == _selectedDistrict?.id
+            ? _selectedMandal?.id
+            : null,
         idOf: (m) => m.id,
       );
       if (mandal == null || !mounted) return;
@@ -563,7 +576,8 @@ class _GmailSsoScreenState extends ConsumerState<GmailSsoScreen> {
                   separatorBuilder: (_, __) => const Divider(height: 1),
                   itemBuilder: (_, i) {
                     final item = items[i];
-                    final isSelected = selectedId != null && idOf(item) == selectedId;
+                    final isSelected =
+                        selectedId != null && idOf(item) == selectedId;
                     return ListTile(
                       title: Text(itemLabel(item)),
                       trailing: isSelected
@@ -647,7 +661,9 @@ class _GmailSsoScreenState extends ConsumerState<GmailSsoScreen> {
                   _mobileController.text = _savedMobile!;
                 }),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md,
+                  ),
                   child: Text(
                     'Cancel',
                     style: TextStyle(

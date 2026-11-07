@@ -237,7 +237,6 @@ class AdminUserManagementController extends ChangeNotifier {
 
     if (success) {
       resetSelections();
-      
     }
 
     return success;

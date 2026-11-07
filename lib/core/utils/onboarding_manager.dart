@@ -4,7 +4,7 @@ import 'package:deep_pulse_news/enums/onboarding_enum.dart';
 class OnboardingManager {
   final OnboardingStorage _onboardingStorage;
   OnboardingManager(this._onboardingStorage);
-  
+
   /// Gets the current onboarding step
   /// Flow: Location → Completed (Home)
   ///
@@ -20,7 +20,7 @@ class OnboardingManager {
 
     return OnboardingStep.location;
   }
-  
+
   /// Mark onboarding as completed and navigate to home
   Future<void> completeOnboarding() async {
     await _onboardingStorage.setOnboardingCompleted();

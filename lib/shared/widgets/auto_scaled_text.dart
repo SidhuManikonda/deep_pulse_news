@@ -40,13 +40,13 @@ class AutoScaledText extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final fontScale = ref.watch(fontScaleProvider);
-    
+
     // Apply font scaling to the provided style or create a default scaled style
     final scaledStyle = (style ?? const TextStyle()).copyWith(
       fontFamily: GoogleFonts.roboto().fontFamily,
       fontSize: ((style?.fontSize ?? 14) * fontScale),
     );
-    
+
     return Text(
       data,
       style: scaledStyle,

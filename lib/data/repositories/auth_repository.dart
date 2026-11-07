@@ -182,7 +182,6 @@ class AuthRepositoryImpl implements AuthRepository {
         showErrorAlert: false,
       );
 
-
       final detail = response['user_detail'];
       if (detail is Map) {
         debugPrint(

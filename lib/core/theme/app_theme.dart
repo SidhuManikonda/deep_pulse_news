@@ -28,9 +28,7 @@ class AppTheme {
           backgroundColor: appPrimaryLightColor,
           foregroundColor: appTextWhiteColor,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           textStyle: GoogleFonts.roboto(
             fontSize: 16,
             fontWeight: FontWeight.w500,
@@ -38,19 +36,41 @@ class AppTheme {
         ),
       ),
       textTheme: GoogleFonts.robotoTextTheme().copyWith(
-        headlineLarge: GoogleFonts.roboto(fontSize: 24, fontWeight: FontWeight.bold, color: appTextPrimaryLightColor),
-        headlineMedium: GoogleFonts.roboto(fontSize: 20, fontWeight: FontWeight.w600, color: appTextPrimaryLightColor),
-        headlineSmall: GoogleFonts.roboto(fontSize: 18, fontWeight: FontWeight.w500, color: appTextPrimaryLightColor),
-        bodyLarge: GoogleFonts.roboto(fontSize: 16, fontWeight: FontWeight.normal, color: appTextPrimaryLightColor),
-        bodyMedium: GoogleFonts.roboto(fontSize: 14, fontWeight: FontWeight.normal, color: appTextSecondaryLightColor),
-        bodySmall: GoogleFonts.roboto(fontSize: 12, fontWeight: FontWeight.normal, color: appTextLightLightColor),
+        headlineLarge: GoogleFonts.roboto(
+          fontSize: 24,
+          fontWeight: FontWeight.bold,
+          color: appTextPrimaryLightColor,
+        ),
+        headlineMedium: GoogleFonts.roboto(
+          fontSize: 20,
+          fontWeight: FontWeight.w600,
+          color: appTextPrimaryLightColor,
+        ),
+        headlineSmall: GoogleFonts.roboto(
+          fontSize: 18,
+          fontWeight: FontWeight.w500,
+          color: appTextPrimaryLightColor,
+        ),
+        bodyLarge: GoogleFonts.roboto(
+          fontSize: 16,
+          fontWeight: FontWeight.normal,
+          color: appTextPrimaryLightColor,
+        ),
+        bodyMedium: GoogleFonts.roboto(
+          fontSize: 14,
+          fontWeight: FontWeight.normal,
+          color: appTextSecondaryLightColor,
+        ),
+        bodySmall: GoogleFonts.roboto(
+          fontSize: 12,
+          fontWeight: FontWeight.normal,
+          color: appTextLightLightColor,
+        ),
       ),
       cardTheme: CardThemeData(
         color: appSurfaceLightColor,
         elevation: 2,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       bottomNavigationBarTheme: BottomNavigationBarThemeData(
         backgroundColor: appBackgroundLightColor,
@@ -73,17 +93,10 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(
-            color: appPrimaryLightColor,
-            width: 2,
-          ),
+          borderSide: BorderSide(color: appPrimaryLightColor, width: 2),
         ),
-        hintStyle: TextStyle(
-          color: appTextLightLightColor,
-        ),
-        labelStyle: TextStyle(
-          color: appTextSecondaryLightColor,
-        ),
+        hintStyle: TextStyle(color: appTextLightLightColor),
+        labelStyle: TextStyle(color: appTextSecondaryLightColor),
       ),
     );
   }
@@ -113,53 +126,50 @@ class AppTheme {
           backgroundColor: appPrimaryLightColor,
           foregroundColor: appTextWhiteColor,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           textStyle: GoogleFonts.roboto(
             fontSize: 16,
             fontWeight: FontWeight.w500,
           ),
         ),
       ),
-      textTheme: GoogleFonts.robotoTextTheme(ThemeData.dark().textTheme).copyWith(
-        headlineLarge: GoogleFonts.roboto(
-          fontSize: 24,
-          fontWeight: FontWeight.bold,
-          color: appTextWhiteColor,
-        ),
-        headlineMedium: GoogleFonts.roboto(
-          fontSize: 20,
-          fontWeight: FontWeight.w600,
-          color: appTextWhiteColor,
-        ),
-        headlineSmall: GoogleFonts.roboto(
-          fontSize: 18,
-          fontWeight: FontWeight.w500,
-          color: appTextWhiteColor,
-        ),
-        bodyLarge: GoogleFonts.roboto(
-          fontSize: 16,
-          fontWeight: FontWeight.normal,
-          color: appTextWhiteColor,
-        ),
-        bodyMedium: GoogleFonts.roboto(
-          fontSize: 14,
-          fontWeight: FontWeight.normal,
-          color: appTextLightDarkColor,
-        ),
-        bodySmall: GoogleFonts.roboto(
-          fontSize: 12,
-          fontWeight: FontWeight.normal,
-          color: appTextLightDarkColor,
-        ),
-      ),
+      textTheme: GoogleFonts.robotoTextTheme(ThemeData.dark().textTheme)
+          .copyWith(
+            headlineLarge: GoogleFonts.roboto(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: appTextWhiteColor,
+            ),
+            headlineMedium: GoogleFonts.roboto(
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+              color: appTextWhiteColor,
+            ),
+            headlineSmall: GoogleFonts.roboto(
+              fontSize: 18,
+              fontWeight: FontWeight.w500,
+              color: appTextWhiteColor,
+            ),
+            bodyLarge: GoogleFonts.roboto(
+              fontSize: 16,
+              fontWeight: FontWeight.normal,
+              color: appTextWhiteColor,
+            ),
+            bodyMedium: GoogleFonts.roboto(
+              fontSize: 14,
+              fontWeight: FontWeight.normal,
+              color: appTextLightDarkColor,
+            ),
+            bodySmall: GoogleFonts.roboto(
+              fontSize: 12,
+              fontWeight: FontWeight.normal,
+              color: appTextLightDarkColor,
+            ),
+          ),
       cardTheme: CardThemeData(
         color: appSurfaceDarkColor,
         elevation: 2,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       bottomNavigationBarTheme: BottomNavigationBarThemeData(
         backgroundColor: appBackgroundDarkColor,
@@ -182,17 +192,10 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(
-            color: Colors.white70,
-            width: 2,
-          ),
+          borderSide: BorderSide(color: Colors.white70, width: 2),
         ),
-        hintStyle: TextStyle(
-          color: appTextLightDarkColor,
-        ),
-        labelStyle: TextStyle(
-          color: appTextSecondaryDarkColor,
-        ),
+        hintStyle: TextStyle(color: appTextLightDarkColor),
+        labelStyle: TextStyle(color: appTextSecondaryDarkColor),
       ),
     );
   }

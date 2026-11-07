@@ -73,16 +73,23 @@ class OnboardingStorage {
     await prefs.setBool(_onboardingCompletedKey, true);
   }
 
-  Future<void> saveSelectedLocation(State state, District? district, Mandal? mandal) async {
+  Future<void> saveSelectedLocation(
+    State state,
+    District? district,
+    Mandal? mandal,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_selectedStateKey, jsonEncode(state.toJson()));
-    
+
     if (district != null) {
-      await prefs.setString(_selectedDistrictKey, jsonEncode(district.toJson()));
+      await prefs.setString(
+        _selectedDistrictKey,
+        jsonEncode(district.toJson()),
+      );
     } else {
       await prefs.remove(_selectedDistrictKey);
     }
-    
+
     if (mandal != null) {
       await prefs.setString(_selectedMandalKey, jsonEncode(mandal.toJson()));
     } else {
@@ -136,10 +143,7 @@ class OnboardingStorage {
   // Language storage methods
   Future<void> saveSelectedLanguage(int languageId, String languageName) async {
     final prefs = await SharedPreferences.getInstance();
-    final languageData = {
-      'id': languageId,
-      'name': languageName,
-    };
+    final languageData = {'id': languageId, 'name': languageName};
     await prefs.setString(_selectedLanguageKey, jsonEncode(languageData));
   }
 

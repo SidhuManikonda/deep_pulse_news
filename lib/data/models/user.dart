@@ -58,34 +58,50 @@ class User {
       email: json['email'] ?? '',
       mobile: json['mobile'] ?? '',
       otpCode: json['otp_code'],
-      otpExpiresAt: json['otp_expires_at'] != null 
-          ? DateTime.parse(json['otp_expires_at']) 
+      otpExpiresAt: json['otp_expires_at'] != null
+          ? DateTime.parse(json['otp_expires_at'])
           : null,
       isActive: json['is_active'] is int
           ? json['is_active'] == 1
           : json['is_active'] ?? true,
-      emailVerifiedAt: json['email_verified_at'] != null 
-          ? DateTime.parse(json['email_verified_at']) 
+      emailVerifiedAt: json['email_verified_at'] != null
+          ? DateTime.parse(json['email_verified_at'])
           : null,
-      createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : null,
-      updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at']) : null,
+      createdAt: json['created_at'] != null
+          ? DateTime.parse(json['created_at'])
+          : null,
+      updatedAt: json['updated_at'] != null
+          ? DateTime.parse(json['updated_at'])
+          : null,
       rememberToken: json['remember_token'],
       roleName: json['role_name'],
       userId: json['user_id'],
-      roles: json['roles'] != null 
+      roles: json['roles'] != null
           ? (json['roles'] as List).map((role) => Role.fromJson(role)).toList()
           : null,
-      stateId: json['state_id'] ?? (json['user_detail'] != null ? json['user_detail']['state_id'] : null),
-      districtId: json['district_id'] ?? (json['user_detail'] != null ? json['user_detail']['district_id'] : null),
-      mandalId: json['mandal_id'] ?? (json['user_detail'] != null ? json['user_detail']['mandal_id'] : null),
+      stateId:
+          json['state_id'] ??
+          (json['user_detail'] != null
+              ? json['user_detail']['state_id']
+              : null),
+      districtId:
+          json['district_id'] ??
+          (json['user_detail'] != null
+              ? json['user_detail']['district_id']
+              : null),
+      mandalId:
+          json['mandal_id'] ??
+          (json['user_detail'] != null
+              ? json['user_detail']['mandal_id']
+              : null),
       stateName: json['state_name'],
       districtName: json['district_name'],
       mandalName: json['mandal_name'],
       isBlocked: json['is_blocked'] == null
           ? null
           : (json['is_blocked'] is int
-              ? json['is_blocked'] == 1
-              : json['is_blocked'] == true),
+                ? json['is_blocked'] == 1
+                : json['is_blocked'] == true),
       isBlockedByAdmin: json['is_blocked_by_admin'] is int
           ? json['is_blocked_by_admin'] == 1
           : json['is_blocked_by_admin'] == true,
@@ -110,16 +126,23 @@ class User {
     debugPrint('  user_detail.profile_photo = $detail');
     // Also flag anything photo-ish in case the backend used a different key
     final photoLike = <String>[
-      ...json.keys.where((k) => k.toString().toLowerCase().contains('photo')
-          || k.toString().toLowerCase().contains('picture')
-          || k.toString().toLowerCase().contains('avatar')
-          || k.toString().toLowerCase().contains('image')),
+      ...json.keys.where(
+        (k) =>
+            k.toString().toLowerCase().contains('photo') ||
+            k.toString().toLowerCase().contains('picture') ||
+            k.toString().toLowerCase().contains('avatar') ||
+            k.toString().toLowerCase().contains('image'),
+      ),
       if (detailMap != null)
-        ...detailMap.keys.where((k) => k.toString().toLowerCase().contains('photo')
-            || k.toString().toLowerCase().contains('picture')
-            || k.toString().toLowerCase().contains('avatar')
-            || k.toString().toLowerCase().contains('image'))
-          .map((k) => 'user_detail.$k'),
+        ...detailMap.keys
+            .where(
+              (k) =>
+                  k.toString().toLowerCase().contains('photo') ||
+                  k.toString().toLowerCase().contains('picture') ||
+                  k.toString().toLowerCase().contains('avatar') ||
+                  k.toString().toLowerCase().contains('image'),
+            )
+            .map((k) => 'user_detail.$k'),
     ];
     debugPrint('  photo-ish keys found    = $photoLike');
     return (topLevel as String?) ?? (detail as String?);
@@ -233,11 +256,17 @@ class Role {
       name: json['name'] ?? '',
       slug: json['slug'],
       description: json['description'],
-      createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : null,
-      updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at']) : null,
+      createdAt: json['created_at'] != null
+          ? DateTime.parse(json['created_at'])
+          : null,
+      updatedAt: json['updated_at'] != null
+          ? DateTime.parse(json['updated_at'])
+          : null,
       pivot: json['pivot'] != null ? RolePivot.fromJson(json['pivot']) : null,
       permissions: json['permissions'] != null
-          ? (json['permissions'] as List).map((permission) => Permission.fromJson(permission)).toList()
+          ? (json['permissions'] as List)
+                .map((permission) => Permission.fromJson(permission))
+                .toList()
           : null,
     );
   }
@@ -251,7 +280,9 @@ class Role {
       'created_at': createdAt?.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),
       'pivot': pivot?.toJson(),
-      'permissions': permissions?.map((permission) => permission.toJson()).toList(),
+      'permissions': permissions
+          ?.map((permission) => permission.toJson())
+          .toList(),
     };
   }
 }
@@ -260,10 +291,7 @@ class RolePivot {
   final int userId;
   final int roleId;
 
-  RolePivot({
-    required this.userId,
-    required this.roleId,
-  });
+  RolePivot({required this.userId, required this.roleId});
 
   factory RolePivot.fromJson(Map<String, dynamic> json) {
     return RolePivot(
@@ -273,10 +301,7 @@ class RolePivot {
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'user_id': userId,
-      'role_id': roleId,
-    };
+    return {'user_id': userId, 'role_id': roleId};
   }
 }
 
@@ -305,9 +330,15 @@ class Permission {
       name: json['name'] ?? '',
       slug: json['slug'],
       description: json['description'],
-      createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : null,
-      updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at']) : null,
-      pivot: json['pivot'] != null ? PermissionPivot.fromJson(json['pivot']) : null,
+      createdAt: json['created_at'] != null
+          ? DateTime.parse(json['created_at'])
+          : null,
+      updatedAt: json['updated_at'] != null
+          ? DateTime.parse(json['updated_at'])
+          : null,
+      pivot: json['pivot'] != null
+          ? PermissionPivot.fromJson(json['pivot'])
+          : null,
     );
   }
 
@@ -328,10 +359,7 @@ class PermissionPivot {
   final int roleId;
   final int permissionId;
 
-  PermissionPivot({
-    required this.roleId,
-    required this.permissionId,
-  });
+  PermissionPivot({required this.roleId, required this.permissionId});
 
   factory PermissionPivot.fromJson(Map<String, dynamic> json) {
     return PermissionPivot(
@@ -341,10 +369,7 @@ class PermissionPivot {
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'role_id': roleId,
-      'permission_id': permissionId,
-    };
+    return {'role_id': roleId, 'permission_id': permissionId};
   }
 }
 
@@ -353,11 +378,7 @@ class Language {
   final String name;
   final String flag;
 
-  Language({
-    required this.code,
-    required this.name,
-    required this.flag,
-  });
+  Language({required this.code, required this.name, required this.flag});
 
   static List<Language> get supportedLanguages => [
     Language(code: 'en', name: 'English', flag: '🇺🇸'),
@@ -384,7 +405,12 @@ class UITopic {
     UITopic(id: 'trending', name: 'Trending', icon: '🔥', color: 'E53E3E'),
     UITopic(id: 'politics', name: 'Politics', icon: '🏛️', color: '3182CE'),
     UITopic(id: 'sports', name: 'Sports', icon: '⚽', color: '38A169'),
-    UITopic(id: 'entertainment', name: 'Entertainment', icon: '🎬', color: '9F7AEA'),
+    UITopic(
+      id: 'entertainment',
+      name: 'Entertainment',
+      icon: '🎬',
+      color: '9F7AEA',
+    ),
     UITopic(id: 'business', name: 'Business', icon: '💼', color: 'D69E2E'),
     UITopic(id: 'technology', name: 'Technology', icon: '💻', color: '00B5D8'),
     UITopic(id: 'health', name: 'Health', icon: '🏥', color: 'FF6B6B'),

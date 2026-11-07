@@ -91,9 +91,7 @@ class NewsViewTrackerService {
   /// Cancel the pending dwell timer (user scrolled away, screen closed).
   void cancelPendingView() {
     if (_pendingDwellTimer != null) {
-      debugPrint(
-        '[NewsViewTracker] cancelled pending newsId=$_pendingNewsId',
-      );
+      debugPrint('[NewsViewTracker] cancelled pending newsId=$_pendingNewsId');
     }
     _pendingDwellTimer?.cancel();
     _pendingDwellTimer = null;

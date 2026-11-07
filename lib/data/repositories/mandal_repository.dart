@@ -18,7 +18,11 @@ class MandalRepositoryImpl implements MandalRepository {
   @override
   Future<List<Mandal>> getMandalsByDistrict(int districtId) async {
     try {
-      final response = await _apiService.get('${AppConstants.mandals}/$districtId', useAuth: false, showErrorAlert: false);
+      final response = await _apiService.get(
+        '${AppConstants.mandals}/$districtId',
+        useAuth: false,
+        showErrorAlert: false,
+      );
 
       if (response.containsKey('error')) {
         throw Exception(response['error']);
@@ -31,7 +35,9 @@ class MandalRepositoryImpl implements MandalRepository {
         final districtObj = districtData[0];
         if (districtObj.containsKey('mandals')) {
           final mandalsData = districtObj['mandals'] as List<dynamic>;
-          return mandalsData.map((mandalJson) => Mandal.fromJson(mandalJson)).toList();
+          return mandalsData
+              .map((mandalJson) => Mandal.fromJson(mandalJson))
+              .toList();
         }
       }
 
@@ -44,7 +50,10 @@ class MandalRepositoryImpl implements MandalRepository {
   @override
   Future<Mandal?> getMandalById(int id) async {
     try {
-      final response = await _apiService.get('${AppConstants.mandals}/$id', useAuth: false);
+      final response = await _apiService.get(
+        '${AppConstants.mandals}/$id',
+        useAuth: false,
+      );
 
       if (response.containsKey('error')) {
         throw Exception(response['error']);

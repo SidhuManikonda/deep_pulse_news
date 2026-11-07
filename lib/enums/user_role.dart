@@ -69,6 +69,16 @@ enum UserRole {
   // Check if current role can upload content
   bool get canUploadContent => level >= UserRole.reporter.level;
 
+  /// Whether this role may attach a YouTube link to an ad slot.
+  ///
+  /// Admin, Sub Admin and News Desk only. Sr Reporters keep ordinary file ad
+  /// uploads — they lose this one option, nothing they had before.
+  ///
+  /// Named separately rather than reusing [canModerateContent], which happens
+  /// to draw the line in the same place today: these are different decisions
+  /// and either can move without dragging the other with it.
+  bool get canPostYoutubeAds => level >= UserRole.distReporter.level;
+
   // Check if current role can moderate content
   bool get canModerateContent => level >= UserRole.distReporter.level;
 

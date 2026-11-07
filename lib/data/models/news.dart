@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import 'news_translation.dart';
 import 'news_media.dart';
 import 'news_ad.dart';
@@ -30,6 +32,7 @@ class News {
   /// Kept apart from [media] deliberately: these are adverts, and the UI must
   /// label and place them differently from the article's own photos.
   final List<NewsAd> ads;
+
   final String? approverName;
   final int? isLiked;
   final int likesCount;
@@ -151,17 +154,57 @@ class News {
     final adsJson = json['ads'];
     final adsList = <NewsAd>[];
     if (adsJson is List) {
-      for (final entry in adsJson) {
-        final ad = NewsAd.tryParse(entry);
+      for (var i = 0; i < adsJson.length; i++) {
+        // The element names its own `slot`; the position is only a stand-in for
+        // a payload that doesn't.
+        final ad = NewsAd.tryParse(adsJson[i], fallbackSlot: i + 1);
         if (ad != null) adsList.add(ad);
       }
     }
     if (adsList.isEmpty) {
       for (final key in ['ad_1', 'ad_2']) {
-        final ad = NewsAd.tryParse(json[key]);
+        final ad = NewsAd.tryParse(
+          json[key],
+          fallbackSlot: key == 'ad_1' ? 1 : 2,
+        );
         if (ad != null) adsList.add(ad);
       }
     }
+
+    // A slot may instead hold a YouTube link, sent back as `youtube_url_1` /
+    // `youtube_url_2` beside the file ads rather than inside the `ads` array.
+    // A slot holds one or the other, so a link only fills a place no file ad
+    // claimed — if both somehow arrive, the uploaded file is what the editor
+    // last saw in the form, and it wins.
+    //
+    // The keys live on the *translation*, beside the title and body, not at
+    // the article's top level — the link is authored with the text, so that is
+    // where it was put. Top level is still checked first in case a route
+    // flattens it.
+    final rawTranslations = json['translations'];
+    final firstTranslation =
+        (rawTranslations is List &&
+            rawTranslations.isNotEmpty &&
+            rawTranslations.first is Map)
+        ? rawTranslations.first as Map
+        : null;
+
+    String? youtubeFor(String key) {
+      final top = json[key]?.toString();
+      if (top != null && top.isNotEmpty && top != 'null') return top;
+      final nested = firstTranslation?[key]?.toString();
+      if (nested != null && nested.isNotEmpty && nested != 'null') {
+        return nested;
+      }
+      return null;
+    }
+
+    for (final (slot, key) in [(1, 'youtube_url_1'), (2, 'youtube_url_2')]) {
+      if (adsList.any((a) => a.slot == slot)) continue;
+      final ad = NewsAd.youtube(url: youtubeFor(key), slot: slot);
+      if (ad != null) adsList.add(ad);
+    }
+    adsList.sort((a, b) => a.slot.compareTo(b.slot));
 
     // Handle nested 'approver' object (new API) or flat field (old API)
     final approverObj = json['approver'];
@@ -350,6 +393,15 @@ class News {
       locations.where((l) => l.isMandal).toList();
 
   bool hasTopicId(int id) => topicLocations.any((l) => l.id == id);
+
+  /// The YouTube link in [slot], or null when that slot is empty or holds a
+  /// file. Used by the edit form to put the URL back in its field.
+  String? youtubeUrlForSlot(int slot) {
+    for (final ad in ads) {
+      if (ad.slot == slot && ad.isYoutube) return ad.url;
+    }
+    return null;
+  }
 
   /// True when there is at least one advert to show.
   bool get hasAds => ads.isNotEmpty;

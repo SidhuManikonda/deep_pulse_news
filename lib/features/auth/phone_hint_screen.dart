@@ -135,7 +135,10 @@ class _PhoneHintScreenState extends State<PhoneHintScreen> {
               if (_selectedNumber != null)
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 18,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFFF9FAFB),
                     borderRadius: BorderRadius.circular(14),
@@ -150,8 +153,11 @@ class _PhoneHintScreenState extends State<PhoneHintScreen> {
                           color: theme.appPrimary.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: Icon(Icons.phone_rounded,
-                            color: theme.appPrimary, size: 22),
+                        child: Icon(
+                          Icons.phone_rounded,
+                          color: theme.appPrimary,
+                          size: 22,
+                        ),
                       ),
                       const SizedBox(width: 16),
                       Expanded(
@@ -186,8 +192,11 @@ class _PhoneHintScreenState extends State<PhoneHintScreen> {
                             color: const Color(0xFFF3F4F6),
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: const Icon(Icons.swap_horiz_rounded,
-                              size: 20, color: Color(0xFF6B7280)),
+                          child: const Icon(
+                            Icons.swap_horiz_rounded,
+                            size: 20,
+                            color: Color(0xFF6B7280),
+                          ),
                         ),
                       ),
                     ],

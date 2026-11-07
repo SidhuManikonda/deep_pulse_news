@@ -34,8 +34,8 @@ class _MandalSelectionScreenState extends ConsumerState<MandalSelectionScreen> {
     final filtered = _query.isEmpty
         ? vm.mandals
         : vm.mandals
-            .where((m) => m.name.toLowerCase().contains(_query.toLowerCase()))
-            .toList();
+              .where((m) => m.name.toLowerCase().contains(_query.toLowerCase()))
+              .toList();
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -46,7 +46,10 @@ class _MandalSelectionScreenState extends ConsumerState<MandalSelectionScreen> {
             // ── Header ───────────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(
-                AppSpacing.sm, AppSpacing.sm, AppSpacing.lg, 0,
+                AppSpacing.sm,
+                AppSpacing.sm,
+                AppSpacing.lg,
+                0,
               ),
               child: Row(
                 children: [
@@ -70,7 +73,10 @@ class _MandalSelectionScreenState extends ConsumerState<MandalSelectionScreen> {
 
             Padding(
               padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm,
+                AppSpacing.lg,
+                AppSpacing.md,
+                AppSpacing.lg,
+                AppSpacing.sm,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -92,8 +98,11 @@ class _MandalSelectionScreenState extends ConsumerState<MandalSelectionScreen> {
                     const SizedBox(height: AppSpacing.xs),
                     Row(
                       children: [
-                        Icon(Icons.location_on_rounded,
-                            size: 14, color: theme.appPrimary),
+                        Icon(
+                          Icons.location_on_rounded,
+                          size: 14,
+                          color: theme.appPrimary,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           '${vm.selectedState!.name}  ›  ${vm.selectedDistrict!.name}',
@@ -121,7 +130,10 @@ class _MandalSelectionScreenState extends ConsumerState<MandalSelectionScreen> {
                   ? buildLoadingList()
                   : vm.mandalsError != null
                   ? buildErrorWidget(
-                      context, vm.mandalsError!, vm.retryLoadMandals)
+                      context,
+                      vm.mandalsError!,
+                      vm.retryLoadMandals,
+                    )
                   : filtered.isEmpty
                   ? Center(
                       child: Text(
@@ -156,7 +168,10 @@ class _MandalSelectionScreenState extends ConsumerState<MandalSelectionScreen> {
             // ── Continue button ───────────────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, AppSpacing.xl,
+                AppSpacing.lg,
+                AppSpacing.sm,
+                AppSpacing.lg,
+                AppSpacing.xl,
               ),
               child: CustomButton(
                 text: vm.selectedMandal != null
@@ -218,7 +233,9 @@ class _MandalSelectionScreenState extends ConsumerState<MandalSelectionScreen> {
     } catch (_) {
       if (mounted) {
         Navigator.pushNamedAndRemoveUntil(
-          context, AppRouter.locationSelection, (_) => false,
+          context,
+          AppRouter.locationSelection,
+          (_) => false,
         );
       }
     } finally {

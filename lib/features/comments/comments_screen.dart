@@ -1000,7 +1000,7 @@ class _CommentsScreenState extends ConsumerState<CommentsScreen> {
                       }
                     },
               child: AnimatedContainer(
-                duration:  Duration(milliseconds: 200),
+                duration: Duration(milliseconds: 200),
                 width: 38,
                 height: 38,
                 decoration: BoxDecoration(

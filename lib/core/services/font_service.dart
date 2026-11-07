@@ -6,7 +6,7 @@ enum FontSize {
   large('Large', 1.15);
 
   const FontSize(this.displayName, this.scale);
-  
+
   final String displayName;
   final double scale;
 
@@ -20,7 +20,7 @@ enum FontSize {
 
 class FontService {
   static const String _fontSizeKey = 'app_font_size';
-  
+
   // Get saved font size
   Future<FontSize> getFontSize() async {
     final prefs = await SharedPreferences.getInstance();

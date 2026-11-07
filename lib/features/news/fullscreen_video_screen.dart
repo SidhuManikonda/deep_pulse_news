@@ -211,8 +211,10 @@ class _FullscreenVideoScreenState extends ConsumerState<FullscreenVideoScreen> {
           children: [
             const Icon(Icons.error_outline, color: Colors.white54, size: 48),
             const SizedBox(height: 12),
-            const Text('Failed to load video',
-                style: TextStyle(color: Colors.white54)),
+            const Text(
+              'Failed to load video',
+              style: TextStyle(color: Colors.white54),
+            ),
             const SizedBox(height: 12),
             TextButton.icon(
               onPressed: () {
@@ -223,8 +225,10 @@ class _FullscreenVideoScreenState extends ConsumerState<FullscreenVideoScreen> {
                 _initializeVideo();
               },
               icon: const Icon(Icons.refresh, color: Colors.white70, size: 18),
-              label:
-                  const Text('Retry', style: TextStyle(color: Colors.white70)),
+              label: const Text(
+                'Retry',
+                style: TextStyle(color: Colors.white70),
+              ),
             ),
           ],
         ),
@@ -282,10 +286,7 @@ class _FullscreenVideoScreenState extends ConsumerState<FullscreenVideoScreen> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Colors.black.withOpacity(0.7),
-              Colors.transparent,
-            ],
+            colors: [Colors.black.withOpacity(0.7), Colors.transparent],
           ),
         ),
         child: Row(
@@ -409,10 +410,7 @@ class _FullscreenVideoScreenState extends ConsumerState<FullscreenVideoScreen> {
             gradient: LinearGradient(
               begin: Alignment.bottomCenter,
               end: Alignment.topCenter,
-              colors: [
-                Colors.black.withOpacity(0.8),
-                Colors.transparent,
-              ],
+              colors: [Colors.black.withOpacity(0.8), Colors.transparent],
             ),
           ),
           child: Row(
@@ -447,9 +445,10 @@ class _FullscreenVideoScreenState extends ConsumerState<FullscreenVideoScreen> {
                     overlayColor: Colors.white.withOpacity(0.15),
                   ),
                   child: Slider(
-                    value: _position.inMilliseconds
-                        .toDouble()
-                        .clamp(0.0, _duration.inMilliseconds.toDouble()),
+                    value: _position.inMilliseconds.toDouble().clamp(
+                      0.0,
+                      _duration.inMilliseconds.toDouble(),
+                    ),
                     min: 0,
                     max: _duration.inMilliseconds.toDouble(),
                     onChangeStart: (v) {
@@ -467,17 +466,18 @@ class _FullscreenVideoScreenState extends ConsumerState<FullscreenVideoScreen> {
                       setState(() => _isDragging = false);
                       _suppressTimer?.cancel();
                       _suppressBuffering = true;
-                      _controller!
-                          .seekTo(Duration(milliseconds: v.toInt()));
+                      _controller!.seekTo(Duration(milliseconds: v.toInt()));
                       if (_wasPlayingBeforeDrag) {
                         _controller!.play();
                       }
-                      _suppressTimer =
-                          Timer(const Duration(milliseconds: 1500), () {
-                        if (mounted) {
-                          setState(() => _suppressBuffering = false);
-                        }
-                      });
+                      _suppressTimer = Timer(
+                        const Duration(milliseconds: 1500),
+                        () {
+                          if (mounted) {
+                            setState(() => _suppressBuffering = false);
+                          }
+                        },
+                      );
                       _startHideTimer();
                     },
                   ),
@@ -490,7 +490,7 @@ class _FullscreenVideoScreenState extends ConsumerState<FullscreenVideoScreen> {
                 child: Text(
                   _fmt(_duration),
                   textAlign: TextAlign.end,
-                  style:  TextStyle(
+                  style: TextStyle(
                     color: Colors.white,
                     fontSize: scaledFontSize(12),
                     fontWeight: FontWeight.w500,

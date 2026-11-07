@@ -37,7 +37,9 @@ class MediaPickerService {
     final granted = await _requestMediaPermission();
     if (!granted) {
       // Still try — image_picker might handle it internally
-      debugPrint('Media permission not explicitly granted, trying picker anyway');
+      debugPrint(
+        'Media permission not explicitly granted, trying picker anyway',
+      );
     }
 
     try {
@@ -76,7 +78,9 @@ class MediaPickerService {
   Future<File?> pickAudio() async {
     final granted = await _requestAudioPermission();
     if (!granted) {
-      debugPrint('Audio permission not explicitly granted, trying picker anyway');
+      debugPrint(
+        'Audio permission not explicitly granted, trying picker anyway',
+      );
     }
 
     try {
@@ -92,7 +96,9 @@ class MediaPickerService {
   Future<File?> pickVideo() async {
     final granted = await _requestMediaPermission(isVideo: true);
     if (!granted) {
-      debugPrint('Video permission not explicitly granted, trying picker anyway');
+      debugPrint(
+        'Video permission not explicitly granted, trying picker anyway',
+      );
     }
 
     try {

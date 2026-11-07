@@ -1,13 +1,20 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:video_player/video_player.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_font_sizes.dart';
+import '../../core/utils/youtube_url.dart';
+import '../../shared/widgets/youtube_link_dialog.dart';
 import '../../core/services/media_picker_services.dart';
 import '../../data/models/feed_ad.dart';
+import '../../extensions/user_extensions.dart';
 import '../../providers/app_providers.dart';
 import '../../shared/widgets/app_loader.dart';
 import '../../shared/widgets/cached_image_widget.dart';
+import '../../shared/widgets/news_ad_block.dart';
 import 'ads_management_controller.dart';
 
 /// Manages the standalone adverts that run between articles in the reader feed.
@@ -30,7 +37,12 @@ class _AdsManagementScreenState extends ConsumerState<AdsManagementScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(adsManagementControllerProvider).loadAds();
+      final controller = ref.read(adsManagementControllerProvider);
+      controller.loadAds();
+      // The filters need these too, so they're loaded with the screen rather
+      // than only when the create/edit form is opened.
+      controller.loadStates();
+      controller.loadTopics();
     });
   }
 
@@ -63,6 +75,7 @@ class _AdsManagementScreenState extends ConsumerState<AdsManagementScreen> {
       body: Column(
         children: [
           _buildFilters(controller, theme),
+          _buildFilterBar(controller, theme),
           Expanded(child: _buildList(controller, theme)),
         ],
       ),
@@ -95,11 +108,335 @@ class _AdsManagementScreenState extends ConsumerState<AdsManagementScreen> {
     );
   }
 
+  /// Opens the same searchable multi-select the targeting form uses. Defined
+  /// here as well because that one belongs to the form sheet's state, and a
+  /// filter must never reach into the form's selections.
+  void _openPicker(
+    ThemeData theme,
+    String label,
+    List<(int, String)> options,
+    Set<int> selected,
+    void Function(int id) onToggle,
+  ) {
+    if (options.isEmpty) return;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => _SearchablePicker(
+        title: label,
+        options: options,
+        selected: selected,
+        onToggle: onToggle,
+        theme: theme,
+      ),
+    );
+  }
+
+  // ── Filters: topic, location, date ────────────────────────────────────────
+  Widget _buildFilterBar(AdsManagementController controller, ThemeData theme) {
+    final topicCount = controller.filterTopicIds.length;
+    final placeCount =
+        controller.filterStateIds.length +
+        controller.filterDistrictIds.length +
+        controller.filterMandalIds.length;
+
+    return SizedBox(
+      height: 44,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+        children: [
+          _filterButton(
+            theme,
+            Icons.sell_outlined,
+            topicCount == 0
+                ? 'Topic'
+                : topicCount == 1
+                ? _topicName(controller, controller.filterTopicIds.first)
+                : '$topicCount topics',
+            active: topicCount > 0,
+            onTap: () => _openPicker(
+              theme,
+              'Topic',
+              controller.topics.map((t) => (t.id, t.name)).toList(),
+              controller.filterTopicIds,
+              controller.toggleFilterTopic,
+            ),
+          ),
+          _filterButton(
+            theme,
+            Icons.place_outlined,
+            placeCount == 0 ? 'Location' : '$placeCount selected',
+            active: placeCount > 0,
+            onTap: () => _openLocationFilter(controller, theme),
+          ),
+          _filterButton(
+            theme,
+            Icons.date_range_outlined,
+            _dateFilterLabel(controller),
+            active:
+                controller.filterFrom != null || controller.filterTo != null,
+            onTap: () => _pickDateFilter(controller),
+          ),
+          if (controller.hasActiveFilters)
+            _filterButton(
+              theme,
+              Icons.close_rounded,
+              'Clear',
+              active: false,
+              onTap: controller.clearFilters,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _filterButton(
+    ThemeData theme,
+    IconData icon,
+    String label, {
+    required bool active,
+    required VoidCallback onTap,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: active ? theme.appPrimary : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: active ? theme.appPrimary : theme.appDivider,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 16,
+                color: active ? Colors.white : theme.appTextSecondary,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: scaledFontSize(13),
+                  fontWeight: FontWeight.w600,
+                  color: active ? Colors.white : theme.appTextSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _topicName(AdsManagementController controller, int id) {
+    for (final t in controller.topics) {
+      if (t.id == id) return t.name;
+    }
+    return '1 topic';
+  }
+
+  static const _months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+
+  static String _shortDate(DateTime d) => '${d.day} ${_months[d.month - 1]}';
+
+  String _dateFilterLabel(AdsManagementController controller) {
+    final from = controller.filterFrom;
+    final to = controller.filterTo;
+    if (from == null && to == null) return 'Date';
+    if (from != null && to != null) {
+      // One day picked twice reads as that day, not as a range of no width.
+      if (from.year == to.year &&
+          from.month == to.month &&
+          from.day == to.day) {
+        return _shortDate(from);
+      }
+      return '${_shortDate(from)} – ${_shortDate(to)}';
+    }
+    return from != null ? 'From ${_shortDate(from)}' : 'To ${_shortDate(to!)}';
+  }
+
+  /// Offers the answers people actually want before offering a calendar.
+  ///
+  /// This used to open a range picker straight away, which made the commonest
+  /// case — one day — the most awkward: you had to tap the same date twice to
+  /// satisfy a start and an end you never wanted. Today and Yesterday are now
+  /// one tap, a single date is two, and a range is still there for the rare
+  /// time it's wanted.
+  Future<void> _pickDateFilter(AdsManagementController controller) async {
+    final theme = Theme.of(context);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (sheetContext) {
+        Widget option(IconData icon, String label, VoidCallback onTap) {
+          return ListTile(
+            leading: Icon(icon, size: 20, color: theme.appTextSecondary),
+            title: Text(
+              label,
+              style: TextStyle(
+                fontSize: scaledFontSize(14),
+                color: theme.appTextPrimary,
+              ),
+            ),
+            onTap: onTap,
+          );
+        }
+
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 8),
+              Container(
+                width: 38,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: theme.appDivider,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 12),
+              option(Icons.today_outlined, 'Today', () {
+                controller.setDateFilter(today, today);
+                Navigator.pop(sheetContext);
+              }),
+              option(Icons.history_rounded, 'Yesterday', () {
+                final d = today.subtract(const Duration(days: 1));
+                controller.setDateFilter(d, d);
+                Navigator.pop(sheetContext);
+              }),
+              option(Icons.date_range_outlined, 'Last 7 days', () {
+                controller.setDateFilter(
+                  today.subtract(const Duration(days: 6)),
+                  today,
+                );
+                Navigator.pop(sheetContext);
+              }),
+              const Divider(height: 8),
+              option(Icons.event_outlined, 'Pick a date', () async {
+                Navigator.pop(sheetContext);
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: controller.filterFrom ?? today,
+                  firstDate: DateTime(2020),
+                  lastDate: DateTime(now.year + 1, 12, 31),
+                  helpText: 'Filter by last updated',
+                );
+                // One date means that whole day — the controller widens the
+                // end to 23:59, so there is no second tap to make.
+                if (picked != null) controller.setDateFilter(picked, picked);
+              }),
+              option(Icons.swap_horiz_rounded, 'Pick a range', () async {
+                Navigator.pop(sheetContext);
+                final picked = await showDateRangePicker(
+                  context: context,
+                  firstDate: DateTime(2020),
+                  lastDate: DateTime(now.year + 1, 12, 31),
+                  initialDateRange: controller.filterFrom != null
+                      ? DateTimeRange(
+                          start: controller.filterFrom!,
+                          end: controller.filterTo ?? controller.filterFrom!,
+                        )
+                      : null,
+                  helpText: 'Filter by last updated',
+                );
+                if (picked != null) {
+                  controller.setDateFilter(picked.start, picked.end);
+                }
+              }),
+              if (controller.filterFrom != null || controller.filterTo != null)
+                option(Icons.close_rounded, 'Clear date filter', () {
+                  controller.setDateFilter(null, null);
+                  Navigator.pop(sheetContext);
+                }),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// One sheet for all three levels — see [_showLocationPicker].
+  void _openLocationFilter(
+    AdsManagementController controller,
+    ThemeData theme,
+  ) {
+    _showLocationPicker(
+      context: context,
+      theme: theme,
+      title: 'Filter by location',
+      listenable: controller,
+      levels: () => [
+        _LocationLevel(
+          label: 'States',
+          options: controller.states.map((s) => (s.id, s.name)).toList(),
+          selected: controller.filterStateIds,
+          onToggle: controller.toggleFilterState,
+          emptyHint: 'No states loaded yet.',
+        ),
+        _LocationLevel(
+          label: 'Districts',
+          options: controller.filterDistricts
+              .map((d) => (d.id, d.name))
+              .toList(),
+          selected: controller.filterDistrictIds,
+          onToggle: controller.toggleFilterDistrict,
+          emptyHint: 'Pick a state first to see its districts.',
+        ),
+        _LocationLevel(
+          label: 'Mandals',
+          options: controller.filterMandals.map((m) => (m.id, m.name)).toList(),
+          selected: controller.filterMandalIds,
+          onToggle: controller.toggleFilterMandal,
+          emptyHint: 'Pick a district first to see its mandals.',
+        ),
+      ],
+    );
+  }
+
   Widget _buildList(AdsManagementController controller, ThemeData theme) {
     if (controller.isLoading && controller.ads.isEmpty) {
       return const Center(child: InlineLoader());
     }
-    if (controller.ads.isEmpty) {
+
+    final ads = controller.visibleAds;
+    if (ads.isEmpty) {
+      // Two different empty states: there are no ads at all, or the filters
+      // hid them. Telling them apart is the difference between "make one" and
+      // "widen your filter".
+      final filtered = controller.ads.isNotEmpty;
       return RefreshIndicator(
         onRefresh: controller.loadAds,
         child: ListView(
@@ -107,7 +444,9 @@ class _AdsManagementScreenState extends ConsumerState<AdsManagementScreen> {
             const SizedBox(height: 140),
             Center(
               child: Text(
-                'No ads yet.\nTap "New Ad" to create one.',
+                filtered
+                    ? 'No ads match these filters.'
+                    : 'No ads yet.\nTap "New Ad" to create one.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: scaledFontSize(14),
@@ -116,6 +455,15 @@ class _AdsManagementScreenState extends ConsumerState<AdsManagementScreen> {
                 ),
               ),
             ),
+            if (filtered) ...[
+              const SizedBox(height: 12),
+              Center(
+                child: TextButton(
+                  onPressed: controller.clearFilters,
+                  child: const Text('Clear filters'),
+                ),
+              ),
+            ],
           ],
         ),
       );
@@ -125,10 +473,9 @@ class _AdsManagementScreenState extends ConsumerState<AdsManagementScreen> {
       onRefresh: controller.loadAds,
       child: ListView.separated(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
-        itemCount: controller.ads.length,
+        itemCount: ads.length,
         separatorBuilder: (_, __) => const SizedBox(height: 12),
-        itemBuilder: (_, i) =>
-            _buildAdCard(controller, controller.ads[i], theme),
+        itemBuilder: (_, i) => _buildAdCard(controller, ads[i], theme),
       ),
     );
   }
@@ -150,17 +497,13 @@ class _AdsManagementScreenState extends ConsumerState<AdsManagementScreen> {
         children: [
           SizedBox(
             height: 150,
-            child: ad.isVideo
-                ? Container(
-                    color: Colors.black12,
-                    child: Center(
-                      child: Icon(
-                        Icons.videocam_rounded,
-                        size: 40,
-                        color: theme.appPrimary,
-                      ),
-                    ),
+            child: ad.isYoutube
+                ? CachedImageWidget(
+                    imageUrl: ad.youtubeThumbnail ?? '',
+                    fit: BoxFit.cover,
                   )
+                : ad.isVideo
+                ? _AdVideoThumbnail(source: ad.url)
                 : CachedImageWidget(imageUrl: ad.url, fit: BoxFit.cover),
           ),
           Padding(
@@ -367,6 +710,7 @@ class _AdsManagementScreenState extends ConsumerState<AdsManagementScreen> {
       controller.startEdit(ad);
     }
     controller.loadStates();
+    controller.loadTopics();
 
     showModalBottomSheet(
       context: context,
@@ -391,6 +735,21 @@ class _AdFormSheet extends ConsumerStatefulWidget {
 
 class _AdFormSheetState extends ConsumerState<_AdFormSheet> {
   final _picker = MediaPickerService();
+
+  /// Admin, Sub Admin and News Desk may put a YouTube link on an ad; Sr
+  /// Reporters upload files only. They can't open this screen today, so this
+  /// is belt-and-braces — the rule stays true if access ever widens.
+  bool get _canPostYoutube =>
+      ref.read(authViewModelProvider).user?.primaryRole.canPostYoutubeAds ??
+      false;
+
+  Future<void> _pasteYoutubeUrl(
+    AdsManagementController controller, {
+    String? initial,
+  }) async {
+    final result = await YoutubeLinkDialog.show(context, initial: initial);
+    if (result != null) controller.setYoutubeUrl(result);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -430,7 +789,22 @@ class _AdFormSheetState extends ConsumerState<_AdFormSheet> {
               children: [
                 _buildMediaPicker(controller, theme),
                 const SizedBox(height: 20),
+                _buildTitleField(controller, theme),
+                const SizedBox(height: 20),
                 _buildStatusPicker(controller, theme),
+                const SizedBox(height: 20),
+                _buildInteractionToggles(controller, theme),
+                const SizedBox(height: 20),
+                _sectionTitle('Topics', theme),
+                Text(
+                  'Pick at least one — an ad has to belong to a topic.',
+                  style: TextStyle(
+                    fontSize: scaledFontSize(12),
+                    color: theme.appTextSecondary,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _buildTopics(controller, theme),
                 const SizedBox(height: 20),
                 _sectionTitle('Where it runs', theme),
                 Text(
@@ -445,6 +819,54 @@ class _AdFormSheetState extends ConsumerState<_AdFormSheet> {
               ],
             ),
           ),
+          // The server's reason, shown in the sheet rather than a snackbar: a
+          // snackbar is drawn behind the sheet, so the one message that says
+          // what to fix was the one thing the admin couldn't see.
+          if (controller.error != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.red.withValues(alpha: 0.4)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.error_outline_rounded,
+                      size: 18,
+                      color: Colors.red[700],
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        controller.error!,
+                        style: TextStyle(
+                          fontSize: scaledFontSize(12.5),
+                          color: Colors.red[700],
+                          height: 1.35,
+                        ),
+                      ),
+                    ),
+                    InkWell(
+                      onTap: controller.clearError,
+                      child: Icon(
+                        Icons.close_rounded,
+                        size: 16,
+                        color: Colors.red[700],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           SafeArea(
             top: false,
             child: Padding(
@@ -465,23 +887,18 @@ class _AdFormSheetState extends ConsumerState<_AdFormSheet> {
                       : () async {
                           final ok = await controller.submit();
                           if (!context.mounted) return;
+                          // Only a saved ad closes the sheet. A rejected one
+                          // keeps everything the admin typed — creative,
+                          // title, topics, targeting — so the fix is one edit
+                          // and another tap, not the whole form again. The
+                          // reason is shown in the banner above the button.
+                          if (!ok) return;
                           Navigator.pop(context);
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              // On failure show what the server said — the
-                              // reason is usually something the admin can fix
-                              // right away (file type, size, targeting).
-                              content: Text(
-                                ok
-                                    ? 'Ad saved'
-                                    : controller.error ??
-                                          'Could not save the ad',
-                              ),
-                              backgroundColor: ok ? null : Colors.red[700],
+                            const SnackBar(
+                              content: Text('Ad saved'),
                               behavior: SnackBarBehavior.floating,
-                              // A validation message runs longer than the stock
-                              // 4s, and it's the whole point of the snackbar.
-                              duration: Duration(seconds: ok ? 3 : 8),
+                              duration: Duration(seconds: 3),
                             ),
                           );
                         },
@@ -524,6 +941,75 @@ class _AdFormSheetState extends ConsumerState<_AdFormSheet> {
   ) {
     final existing = controller.editing;
     final picked = controller.media;
+    final youtube = controller.youtubeUrl;
+
+    // A link ad has no file to show, so it replaces the picker rather than
+    // sitting beside it — one creative per ad, and the panel says which.
+    if (youtube != null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionTitle('Creative', theme),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: SizedBox(
+              height: 160,
+              width: double.infinity,
+              child: YoutubeAdThumbnail(url: youtube),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'YouTube · ${YoutubeUrl.videoId(youtube) ?? ''}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: scaledFontSize(12),
+                    color: theme.appTextSecondary,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: () => _pasteYoutubeUrl(controller, initial: youtube),
+                child: const Text('Change'),
+              ),
+              TextButton(
+                onPressed: () => controller.setYoutubeUrl(null),
+                child: const Text(
+                  'Remove',
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
+            ],
+          ),
+          // Swapping a link for a file was only possible by first tapping
+          // Remove — the picker is hidden while a link is set, so there was
+          // nothing on screen that said "use a file instead". Picking one
+          // clears the link, so this is a single tap rather than two steps.
+          const SizedBox(height: 4),
+          OutlinedButton.icon(
+            onPressed: _pickMedia,
+            icon: const Icon(Icons.add_photo_alternate_outlined, size: 18),
+            label: Text(
+              'Use an image or video instead',
+              style: TextStyle(fontSize: scaledFontSize(13)),
+            ),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(double.infinity, 44),
+              foregroundColor: theme.appPrimary,
+              side: BorderSide(color: theme.appPrimary.withValues(alpha: 0.5)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -543,13 +1029,18 @@ class _AdFormSheetState extends ConsumerState<_AdFormSheet> {
             clipBehavior: Clip.antiAlias,
             child: picked != null
                 // A video file can't be decoded as an image — doing so is what
-                // produced the "Invalid image data" box. Videos get a
-                // placeholder instead of a thumbnail.
+                // produced the "Invalid image data" box. Videos are rendered by
+                // the video decoder instead, which paints their first frame.
                 ? (_isVideoFile(picked.path)
-                      ? _videoPlaceholder(theme, picked.path)
+                      ? _AdVideoThumbnail(source: picked.path)
                       : Image.file(picked, fit: BoxFit.cover))
+                : (existing != null && existing.isYoutube)
+                ? CachedImageWidget(
+                    imageUrl: existing.youtubeThumbnail ?? '',
+                    fit: BoxFit.cover,
+                  )
                 : (existing != null && existing.isVideo)
-                ? _videoPlaceholder(theme, existing.url)
+                ? _AdVideoThumbnail(source: existing.url)
                 : (existing != null)
                 ? CachedImageWidget(imageUrl: existing.url, fit: BoxFit.cover)
                 : Center(
@@ -576,6 +1067,26 @@ class _AdFormSheetState extends ConsumerState<_AdFormSheet> {
                   ),
           ),
         ),
+        if (_canPostYoutube)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => _pasteYoutubeUrl(controller),
+              icon: Icon(
+                Icons.play_circle_outline_rounded,
+                size: 18,
+                color: theme.appPrimary,
+              ),
+              label: Text(
+                'or paste a YouTube link',
+                style: TextStyle(
+                  fontSize: scaledFontSize(13),
+                  fontWeight: FontWeight.w600,
+                  color: theme.appPrimary,
+                ),
+              ),
+            ),
+          ),
         if (controller.isEditing && picked == null)
           Padding(
             padding: const EdgeInsets.only(top: 6),
@@ -625,6 +1136,71 @@ class _AdFormSheetState extends ConsumerState<_AdFormSheet> {
     if (images.isNotEmpty) controller.setMedia(images.first);
   }
 
+  Widget _buildTitleField(AdsManagementController controller, ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionTitle('Title', theme),
+        const SizedBox(height: 8),
+        TextFormField(
+          // initialValue, not a controller: the sheet is rebuilt on every
+          // controller change and a fresh TextEditingController each time
+          // would reset the cursor mid-typing.
+          initialValue: controller.title,
+          onChanged: controller.setTitle,
+          style: TextStyle(fontSize: scaledFontSize(14)),
+          decoration: InputDecoration(
+            hintText: 'Optional — shown over the creative',
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 14,
+            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// What a reader may do with this ad. Each switch removes the matching
+  /// control from the feed card rather than disabling it.
+  Widget _buildInteractionToggles(
+    AdsManagementController controller,
+    ThemeData theme,
+  ) {
+    Widget row(String label, bool value, ValueChanged<bool> onChanged) {
+      return SwitchListTile.adaptive(
+        value: value,
+        onChanged: onChanged,
+        contentPadding: EdgeInsets.zero,
+        dense: true,
+        activeThumbColor: theme.appPrimary,
+        title: Text(
+          label,
+          style: TextStyle(
+            fontSize: scaledFontSize(14),
+            color: theme.appTextPrimary,
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionTitle('Reader actions', theme),
+        row('Allow likes', controller.isLikeable, controller.setLikeable),
+        row('Allow sharing', controller.isShareable, controller.setShareable),
+        row(
+          'Allow reporting',
+          controller.isReportable,
+          controller.setReportable,
+        ),
+      ],
+    );
+  }
+
   Widget _buildStatusPicker(
     AdsManagementController controller,
     ThemeData theme,
@@ -655,6 +1231,26 @@ class _AdFormSheetState extends ConsumerState<_AdFormSheet> {
     );
   }
 
+  Widget _buildTopics(AdsManagementController controller, ThemeData theme) {
+    if (controller.isLoadingTopics) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 20),
+        child: InlineLoader(),
+      );
+    }
+
+    return _selectorRow(
+      theme,
+      'Topics',
+      controller.topics.map((t) => (t.id, t.name)).toList(),
+      controller.selectedTopicIds,
+      (id) => controller.toggleTopic(
+        controller.topics.firstWhere((t) => t.id == id),
+      ),
+      emptyLabel: 'Select topics',
+    );
+  }
+
   Widget _buildTargeting(AdsManagementController controller, ThemeData theme) {
     if (controller.isLoadingStates) {
       return const Padding(
@@ -663,43 +1259,97 @@ class _AdFormSheetState extends ConsumerState<_AdFormSheet> {
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _selectorRow(
-          theme,
-          'States',
-          controller.states.map((s) => (s.id, s.name)).toList(),
-          controller.selectedStateIds,
-          (id) => controller.toggleState(
-            controller.states.firstWhere((s) => s.id == id),
+    final states = controller.selectedStateIds.length;
+    final districts = controller.selectedDistrictIds.length;
+    final mandals = controller.selectedMandalIds.length;
+    final parts = [
+      if (states > 0) '$states state${states == 1 ? '' : 's'}',
+      if (districts > 0) '$districts district${districts == 1 ? '' : 's'}',
+      if (mandals > 0) '$mandals mandal${mandals == 1 ? '' : 's'}',
+    ];
+    final chosen = parts.isNotEmpty;
+
+    // One row, one tap, all three levels. Setting a state, a district and a
+    // mandal used to mean opening and dismissing three separate sheets.
+    return InkWell(
+      onTap: () => _showLocationPicker(
+        context: context,
+        theme: theme,
+        title: 'Where it runs',
+        listenable: controller,
+        levels: () => [
+          _LocationLevel(
+            label: 'States',
+            options: controller.states.map((s) => (s.id, s.name)).toList(),
+            selected: controller.selectedStateIds,
+            onToggle: (id) => controller.toggleState(
+              controller.states.firstWhere((s) => s.id == id),
+            ),
+            emptyHint: 'No states loaded yet.',
           ),
-        ),
-        if (controller.availableDistricts.isNotEmpty) ...[
-          const SizedBox(height: 14),
-          _selectorRow(
-            theme,
-            'Districts',
-            controller.availableDistricts.map((d) => (d.id, d.name)).toList(),
-            controller.selectedDistrictIds,
-            (id) => controller.toggleDistrict(
+          _LocationLevel(
+            label: 'Districts',
+            options: controller.availableDistricts
+                .map((d) => (d.id, d.name))
+                .toList(),
+            selected: controller.selectedDistrictIds,
+            onToggle: (id) => controller.toggleDistrict(
               controller.availableDistricts.firstWhere((d) => d.id == id),
             ),
+            emptyHint: 'Pick a state first to see its districts.',
           ),
-        ],
-        if (controller.availableMandals.isNotEmpty) ...[
-          const SizedBox(height: 14),
-          _selectorRow(
-            theme,
-            'Mandals',
-            controller.availableMandals.map((m) => (m.id, m.name)).toList(),
-            controller.selectedMandalIds,
-            (id) => controller.toggleMandal(
+          _LocationLevel(
+            label: 'Mandals',
+            options: controller.availableMandals
+                .map((m) => (m.id, m.name))
+                .toList(),
+            selected: controller.selectedMandalIds,
+            onToggle: (id) => controller.toggleMandal(
               controller.availableMandals.firstWhere((m) => m.id == id),
             ),
+            emptyHint: 'Pick a district first to see its mandals.',
           ),
         ],
-      ],
+      ),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: chosen ? theme.appPrimary : theme.appDivider,
+          ),
+          color: chosen ? theme.appPrimary.withValues(alpha: 0.04) : null,
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.place_outlined,
+              size: 20,
+              color: chosen ? theme.appPrimary : theme.appTextSecondary,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                chosen ? parts.join(' · ') : 'Runs everywhere',
+                style: TextStyle(
+                  fontSize: scaledFontSize(14),
+                  fontWeight: FontWeight.w600,
+                  color: theme.appTextPrimary,
+                ),
+              ),
+            ),
+            Text(
+              chosen ? 'Change' : 'Target',
+              style: TextStyle(
+                fontSize: scaledFontSize(13),
+                fontWeight: FontWeight.w600,
+                color: theme.appPrimary,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -712,31 +1362,6 @@ class _AdFormSheetState extends ConsumerState<_AdFormSheet> {
         p.endsWith('.webm');
   }
 
-  Widget _videoPlaceholder(ThemeData theme, String path) {
-    return Container(
-      color: Colors.black12,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.videocam_rounded, size: 34, color: theme.appPrimary),
-          const SizedBox(height: 6),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Text(
-              path.split(RegExp(r'[\\/]')).last,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: scaledFontSize(12),
-                color: theme.appTextSecondary,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   /// A tappable summary row that opens a searchable picker.
   ///
   /// Replaces the old wrap of chips: a state has 30+ districts and hundreds of
@@ -747,11 +1372,16 @@ class _AdFormSheetState extends ConsumerState<_AdFormSheet> {
     String label,
     List<(int, String)> options,
     Set<int> selected,
-    void Function(int id) onToggle,
-  ) {
+    void Function(int id) onToggle, {
+
+    /// Shown when nothing is picked. Defaults to the "runs everywhere" reading
+    /// that suits optional location targeting; a required field passes its own
+    /// so an empty selection doesn't read as an allowed state.
+    String? emptyLabel,
+  }) {
     final chosen = options.where((o) => selected.contains(o.$1)).toList();
     final summary = chosen.isEmpty
-        ? 'Any $label'
+        ? (emptyLabel ?? 'Any $label')
         : chosen.length <= 2
         ? chosen.map((o) => o.$2).join(', ')
         : '${chosen.length} selected';
@@ -984,6 +1614,431 @@ class _SearchablePickerState extends State<_SearchablePicker> {
                   ),
                 ),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Paints a still frame of a video as its thumbnail.
+///
+/// `video_player` is the only decoder the project carries, so there is no
+/// thumbnail API to call: the frame is obtained by initialising a muted
+/// controller and seeking a little way in. The controller is never played — it
+/// exists solely to paint one frame — and is disposed with the widget.
+///
+/// [source] is either a remote URL or a local file path; the picker hands over
+/// the latter before an ad is uploaded.
+class _AdVideoThumbnail extends StatefulWidget {
+  const _AdVideoThumbnail({required this.source});
+
+  final String source;
+
+  @override
+  State<_AdVideoThumbnail> createState() => _AdVideoThumbnailState();
+}
+
+class _AdVideoThumbnailState extends State<_AdVideoThumbnail> {
+  VideoPlayerController? _controller;
+  bool _failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant _AdVideoThumbnail oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // The form swaps creatives in place, so the same widget can be handed a
+    // different file without being rebuilt from scratch.
+    if (oldWidget.source != widget.source) {
+      _controller?.dispose();
+      _controller = null;
+      _failed = false;
+      _load();
+    }
+  }
+
+  Future<void> _load() async {
+    final source = widget.source;
+    final controller = source.startsWith('http')
+        ? VideoPlayerController.networkUrl(Uri.parse(source))
+        : VideoPlayerController.file(File(source));
+
+    try {
+      await controller.initialize();
+      await controller.setVolume(0);
+      // The opening frame of an encoded video is frequently black; a short seek
+      // lands on actual content.
+      await controller.seekTo(const Duration(milliseconds: 200));
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+      setState(() => _controller = controller);
+    } catch (_) {
+      await controller.dispose();
+      if (mounted) setState(() => _failed = true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final controller = _controller;
+
+    if (controller == null) {
+      return Container(
+        color: Colors.black12,
+        child: Center(
+          child: _failed
+              ? Icon(
+                  Icons.videocam_off_rounded,
+                  size: 34,
+                  color: theme.appTextLight,
+                )
+              : SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: theme.appPrimary,
+                  ),
+                ),
+        ),
+      );
+    }
+
+    // A controller can report a zero size for a stream whose dimensions never
+    // arrived; falling back to 16:9 keeps FittedBox from dividing by zero.
+    final size = controller.value.size;
+    final width = size.width > 0 ? size.width : 16.0;
+    final height = size.height > 0 ? size.height : 9.0;
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        FittedBox(
+          fit: BoxFit.cover,
+          clipBehavior: Clip.hardEdge,
+          child: SizedBox(
+            width: width,
+            height: height,
+            child: VideoPlayer(controller),
+          ),
+        ),
+        // Without this the still reads as a plain image, losing the one cue
+        // that tells an admin which creatives are video.
+        Center(
+          child: Container(
+            padding: const EdgeInsets.all(6),
+            decoration: const BoxDecoration(
+              color: Colors.black45,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.play_arrow_rounded,
+              size: 26,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// One level of a location picker — the options at that level, what's chosen,
+/// and how to toggle one.
+class _LocationLevel {
+  final String label;
+  final List<(int, String)> options;
+  final Set<int> selected;
+  final void Function(int id) onToggle;
+
+  /// Shown instead of the list when [options] is empty, explaining what the
+  /// user has to pick first rather than leaving them at a blank panel.
+  final String emptyHint;
+
+  const _LocationLevel({
+    required this.label,
+    required this.options,
+    required this.selected,
+    required this.onToggle,
+    required this.emptyHint,
+  });
+}
+
+/// Picks states, districts and mandals in **one** sheet.
+///
+/// Replaces the previous arrangement, where each level was a summary row that
+/// opened a sheet of its own — setting a state, a district and a mandal meant
+/// opening and dismissing three sheets, and from the filter a fourth on top of
+/// them. Here the levels are tabs: switching is a tap, the running selection
+/// stays visible as removable chips, and nothing is nested.
+///
+/// Toggles are applied to the controller as they happen, so a swipe-dismiss
+/// keeps the work rather than discarding it.
+void _showLocationPicker({
+  required BuildContext context,
+  required ThemeData theme,
+  required String title,
+  required Listenable listenable,
+  required List<_LocationLevel> Function() levels,
+}) {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => AnimatedBuilder(
+      animation: listenable,
+      builder: (_, __) =>
+          _LocationPickerSheet(title: title, theme: theme, levels: levels()),
+    ),
+  );
+}
+
+class _LocationPickerSheet extends StatefulWidget {
+  final String title;
+  final ThemeData theme;
+  final List<_LocationLevel> levels;
+
+  const _LocationPickerSheet({
+    required this.title,
+    required this.theme,
+    required this.levels,
+  });
+
+  @override
+  State<_LocationPickerSheet> createState() => _LocationPickerSheetState();
+}
+
+class _LocationPickerSheetState extends State<_LocationPickerSheet> {
+  int _tab = 0;
+  String _query = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = widget.theme;
+    // A level whose parent hasn't been chosen has no options yet; clamping
+    // keeps the tab valid if the user clears a state while deeper in.
+    final tab = _tab.clamp(0, widget.levels.length - 1);
+    final level = widget.levels[tab];
+
+    final q = _query.trim().toLowerCase();
+    final visible = q.isEmpty
+        ? level.options
+        : level.options.where((o) => o.$2.toLowerCase().contains(q)).toList();
+    final allShown =
+        visible.isNotEmpty &&
+        visible.every((o) => level.selected.contains(o.$1));
+
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.82,
+      maxChildSize: 0.95,
+      minChildSize: 0.5,
+      builder: (_, scrollController) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            const SizedBox(height: 8),
+            Container(
+              width: 38,
+              height: 4,
+              decoration: BoxDecoration(
+                color: theme.appDivider,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 12, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      widget.title,
+                      style: TextStyle(
+                        fontSize: scaledFontSize(16),
+                        fontWeight: FontWeight.w700,
+                        color: theme.appTextPrimary,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(
+                      'Done',
+                      style: TextStyle(
+                        fontSize: scaledFontSize(14),
+                        fontWeight: FontWeight.w700,
+                        color: theme.appPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Level tabs. Each carries its own count, so the whole selection
+            // is legible without leaving the panel you're on.
+            SizedBox(
+              height: 36,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: widget.levels.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                itemBuilder: (_, i) {
+                  final l = widget.levels[i];
+                  final on = i == tab;
+                  final count = l.selected.length;
+                  return InkWell(
+                    onTap: () => setState(() {
+                      _tab = i;
+                      _query = '';
+                    }),
+                    borderRadius: BorderRadius.circular(18),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: on ? theme.appPrimary : theme.appGrey100,
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: Text(
+                        count == 0 ? l.label : '${l.label} · $count',
+                        style: TextStyle(
+                          fontSize: scaledFontSize(13),
+                          fontWeight: FontWeight.w600,
+                          color: on ? Colors.white : theme.appTextSecondary,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+
+            if (level.options.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: SizedBox(
+                        height: 40,
+                        child: TextField(
+                          onChanged: (v) => setState(() => _query = v),
+                          style: TextStyle(fontSize: scaledFontSize(14)),
+                          decoration: InputDecoration(
+                            hintText: 'Search ${level.label.toLowerCase()}',
+                            prefixIcon: const Icon(Icons.search, size: 18),
+                            isDense: true,
+                            contentPadding: EdgeInsets.zero,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (visible.isNotEmpty)
+                      TextButton(
+                        // Acts on what the search is showing, so typing a
+                        // prefix and tapping this picks just that group.
+                        onPressed: () => setState(() {
+                          for (final o in visible) {
+                            if (level.selected.contains(o.$1) == allShown) {
+                              level.onToggle(o.$1);
+                            }
+                          }
+                        }),
+                        child: Text(allShown ? 'Clear' : 'All'),
+                      ),
+                  ],
+                ),
+              ),
+
+            // Everything chosen so far, at every level, removable in one tap.
+            if (widget.levels.any((l) => l.selected.isNotEmpty))
+              SizedBox(
+                height: 38,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  children: [
+                    for (final l in widget.levels)
+                      for (final o in l.options.where(
+                        (o) => l.selected.contains(o.$1),
+                      ))
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: InputChip(
+                            label: Text(
+                              o.$2,
+                              style: TextStyle(fontSize: scaledFontSize(12)),
+                            ),
+                            onDeleted: () => setState(() => l.onToggle(o.$1)),
+                            backgroundColor: theme.appGrey100,
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ),
+                  ],
+                ),
+              ),
+
+            const SizedBox(height: 4),
+            Expanded(
+              child: level.options.isEmpty
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: Text(
+                          level.emptyHint,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: scaledFontSize(13),
+                            color: theme.appTextLight,
+                            height: 1.5,
+                          ),
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      controller: scrollController,
+                      padding: const EdgeInsets.only(bottom: 24),
+                      itemCount: visible.length,
+                      itemBuilder: (_, i) {
+                        final o = visible[i];
+                        final on = level.selected.contains(o.$1);
+                        return CheckboxListTile(
+                          value: on,
+                          dense: true,
+                          controlAffinity: ListTileControlAffinity.leading,
+                          activeColor: theme.appPrimary,
+                          title: Text(
+                            o.$2,
+                            style: TextStyle(fontSize: scaledFontSize(14)),
+                          ),
+                          onChanged: (_) =>
+                              setState(() => level.onToggle(o.$1)),
+                        );
+                      },
+                    ),
             ),
           ],
         ),

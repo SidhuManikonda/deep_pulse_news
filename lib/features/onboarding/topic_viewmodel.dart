@@ -29,18 +29,18 @@ class TopicViewmodel extends ChangeNotifier {
 
   Future<List<Topic>> loadTopics() async {
     _isLoading = true;
-    _error=null;
+    _error = null;
     notifyListeners();
     try {
       final topics = await _topicsRepository.getTopics();
       _topics = topics;
       _isLoading = false;
-      _error=null;
+      _error = null;
       notifyListeners();
       return topics;
     } catch (e) {
       _isLoading = false;
-      _error=e.toString();
+      _error = e.toString();
       notifyListeners();
       rethrow;
     }

@@ -46,6 +46,10 @@
                 <data android:scheme="https"
                       android:host="api.deeppulse.media"
                       android:pathPrefix="/news/"/>
+                <!-- Shared standalone ads, https://api.deeppulse.media/ads/{id} -->
+                <data android:scheme="https"
+                      android:host="api.deeppulse.media"
+                      android:pathPrefix="/ads/"/>
             </intent-filter>
         </activity>
         <!-- Route FCM's own notifications (the ones Android builds while the

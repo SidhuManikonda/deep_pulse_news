@@ -4,14 +4,14 @@ import '../../data/repositories/language_repository.dart';
 
 class LanguageViewModel extends ChangeNotifier {
   final LanguageRepository _languageRepository;
-  
+
   List<Language> _languages = [];
   String? _selectedLanguage;
   bool _isLoading = false;
   String? _error;
 
   LanguageViewModel({LanguageRepository? languageRepository})
-      : _languageRepository = languageRepository ?? LanguageRepositoryImpl();
+    : _languageRepository = languageRepository ?? LanguageRepositoryImpl();
 
   // Getters
   List<Language> get languages => _languages;

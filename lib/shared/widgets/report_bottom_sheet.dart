@@ -4,7 +4,9 @@ import '../../core/constants/app_font_sizes.dart';
 import '../../data/repositories/news_repository.dart';
 
 class ReportBottomSheet extends StatefulWidget {
-  final String type; // "news" or "comment"
+  /// `"news"`, `"comment"` or `"ad"` — passed straight through to `/report`
+  /// as its `type`, which is how the backend routes the report.
+  final String type;
   final int itemId;
   final VoidCallback? onReported;
 
@@ -25,11 +27,8 @@ class ReportBottomSheet extends StatefulWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => ReportBottomSheet(
-        type: type,
-        itemId: itemId,
-        onReported: onReported,
-      ),
+      builder: (_) =>
+          ReportBottomSheet(type: type, itemId: itemId, onReported: onReported),
     );
   }
 
@@ -48,6 +47,12 @@ class _ReportBottomSheetState extends State<ReportBottomSheet> {
     'Copyright Violation',
     'Other',
   ];
+
+  static String _typeLabel(String type) => switch (type) {
+    'news' => 'News',
+    'ad' => 'Advertisement',
+    _ => 'Comment',
+  };
 
   String? _selectedReason;
   final TextEditingController _descriptionController = TextEditingController();
@@ -138,7 +143,7 @@ class _ReportBottomSheetState extends State<ReportBottomSheet> {
                 const SizedBox(height: 20),
                 // Title
                 Text(
-                  'Report ${widget.type == 'news' ? 'News' : 'Comment'}',
+                  'Report ${_typeLabel(widget.type)}',
                   style: TextStyle(
                     fontSize: scaledFontSize(18),
                     fontWeight: FontWeight.bold,
@@ -183,8 +188,9 @@ class _ReportBottomSheetState extends State<ReportBottomSheet> {
                           reason,
                           style: TextStyle(
                             fontSize: scaledFontSize(13),
-                            fontWeight:
-                                isSelected ? FontWeight.w600 : FontWeight.w400,
+                            fontWeight: isSelected
+                                ? FontWeight.w600
+                                : FontWeight.w400,
                             color: isSelected
                                 ? theme.appPrimary
                                 : theme.appTextPrimary,
@@ -241,10 +247,9 @@ class _ReportBottomSheetState extends State<ReportBottomSheet> {
                   width: double.infinity,
                   height: 48,
                   child: ElevatedButton(
-                    onPressed:
-                        (_selectedReason != null && !_isSubmitting)
-                            ? _submit
-                            : null,
+                    onPressed: (_selectedReason != null && !_isSubmitting)
+                        ? _submit
+                        : null,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: theme.appPrimary,
                       disabledBackgroundColor: theme.appGrey300,

@@ -19,7 +19,6 @@ class AuthHelper {
 
     // If not authenticated, show login prompt
     final shouldLogin = await showDialog<bool>(
-      
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: Theme.of(context).dialogBackgroundColor,

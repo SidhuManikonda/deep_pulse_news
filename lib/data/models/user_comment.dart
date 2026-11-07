@@ -11,7 +11,9 @@ class UserCommentEntry {
 
   factory UserCommentEntry.fromJson(Map<String, dynamic> json) {
     return UserCommentEntry(
-      comment: UserCommentDetail.fromJson(json['comment'] as Map<String, dynamic>),
+      comment: UserCommentDetail.fromJson(
+        json['comment'] as Map<String, dynamic>,
+      ),
       user: UserCommentUser.fromJson(json['user'] as Map<String, dynamic>),
       news: UserCommentNews.fromJson(json['news'] as Map<String, dynamic>),
     );

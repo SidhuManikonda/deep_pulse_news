@@ -19,7 +19,9 @@ class FontController extends ChangeNotifier {
   }
 
   Future<void> setFontSize(FontSize fontSize) async {
-    debugPrint('🔤 FontController: Setting font size from ${_currentFontSize.displayName} to ${fontSize.displayName}');
+    debugPrint(
+      '🔤 FontController: Setting font size from ${_currentFontSize.displayName} to ${fontSize.displayName}',
+    );
     _currentFontSize = fontSize;
     await _fontService.saveFontSize(fontSize);
     debugPrint('🔤 FontController: Font scale is now ${fontSize.scale}');
@@ -33,9 +35,7 @@ class FontController extends ChangeNotifier {
   }
 
   TextStyle getScaledTextStyle(TextStyle baseStyle) {
-    return baseStyle.copyWith(
-      fontSize: (baseStyle.fontSize ?? 14) * fontScale,
-    );
+    return baseStyle.copyWith(fontSize: (baseStyle.fontSize ?? 14) * fontScale);
   }
 }
 

@@ -148,7 +148,9 @@ class CommentsViewModel extends ChangeNotifier {
   // Delete a comment
   Future<bool> deleteComment(int commentId) async {
     try {
-      final success = await _commentsRepository.deleteComment(commentId: commentId);
+      final success = await _commentsRepository.deleteComment(
+        commentId: commentId,
+      );
       if (success) {
         _comments.removeWhere((c) => c.id == commentId);
         // Also remove from replies
@@ -189,7 +191,9 @@ class CommentsViewModel extends ChangeNotifier {
       );
 
       if (newReply != null) {
-        final parentIndex = _comments.indexWhere((comment) => comment.id == _replyingToComment!.id);
+        final parentIndex = _comments.indexWhere(
+          (comment) => comment.id == _replyingToComment!.id,
+        );
         if (parentIndex != -1) {
           _comments[parentIndex].replies.insert(0, newReply);
         }

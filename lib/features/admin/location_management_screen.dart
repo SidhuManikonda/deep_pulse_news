@@ -460,10 +460,7 @@ Widget _buildListContent({
 
         if (isLoading) {
           return ListView(
-            children: const [
-              SizedBox(height: 120),
-              InlineLoader(),
-            ],
+            children: const [SizedBox(height: 120), InlineLoader()],
           );
         }
 
@@ -563,7 +560,7 @@ class _CreateBarState extends State<_CreateBar> {
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: theme.dividerColor.withOpacity(0.1), // very light border
-            width: 1
+            width: 1,
           ),
           boxShadow: [
             BoxShadow(
@@ -571,7 +568,6 @@ class _CreateBarState extends State<_CreateBar> {
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
-            
           ],
         ),
         child: Row(
@@ -832,10 +828,7 @@ class _LocationTile extends StatelessWidget {
   void _promptRename(BuildContext context) {
     showDialog(
       context: context,
-      builder: (ctx) => _RenameDialog(
-        currentName: name,
-        onSubmit: onRename!,
-      ),
+      builder: (ctx) => _RenameDialog(currentName: name, onSubmit: onRename!),
     );
   }
 

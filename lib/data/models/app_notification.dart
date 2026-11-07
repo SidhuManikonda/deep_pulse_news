@@ -1,4 +1,3 @@
-
 class AppNotification {
   final String id;
   final String? type;

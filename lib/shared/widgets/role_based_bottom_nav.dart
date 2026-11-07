@@ -59,50 +59,32 @@ class RoleBasedBottomNav extends ConsumerWidget {
       selectedItemColor: Theme.of(context).primaryColor,
       unselectedItemColor: Colors.grey[600],
       items: const [
-        BottomNavigationBarItem(
-          icon: Icon(Icons.home),
-          label: 'Home',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.newspaper),
-          label: 'News',
-        ),
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+        BottomNavigationBarItem(icon: Icon(Icons.newspaper), label: 'News'),
         BottomNavigationBarItem(
           icon: Icon(Icons.sports_soccer),
           label: 'Sports',
         ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.person),
-          label: 'Profile',
-        ),
+        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
       ],
     );
   }
 
-  List<Map<String, dynamic>> _getBottomNavItems(List<NavigationItem> navItems, User user) {
+  List<Map<String, dynamic>> _getBottomNavItems(
+    List<NavigationItem> navItems,
+    User user,
+  ) {
     final items = <Map<String, dynamic>>[];
 
     // Always include Home
-    items.add({
-      'icon': 'home',
-      'label': 'Home',
-      'route': 'home',
-    });
+    items.add({'icon': 'home', 'label': 'Home', 'route': 'home'});
 
     // Add News
-    items.add({
-      'icon': 'newspaper',
-      'label': 'News',
-      'route': 'news',
-    });
+    items.add({'icon': 'newspaper', 'label': 'News', 'route': 'news'});
 
     // Add role-specific items
     if (user.canUploadContent) {
-      items.add({
-        'icon': 'upload',
-        'label': 'Upload',
-        'route': '/upload',
-      });
+      items.add({'icon': 'upload', 'label': 'Upload', 'route': '/upload'});
     }
 
     if (user.canModerateContent) {
@@ -113,19 +95,11 @@ class RoleBasedBottomNav extends ConsumerWidget {
       });
     } else if (user.primaryRole.level >= 3) {
       // For dist-reporter and above, show a "More" tab for additional features
-      items.add({
-        'icon': 'more',
-        'label': 'More',
-        'route': 'more',
-      });
+      items.add({'icon': 'more', 'label': 'More', 'route': 'more'});
     }
 
     // Always include Profile
-    items.add({
-      'icon': 'profile',
-      'label': 'Profile',
-      'route': '/profile',
-    });
+    items.add({'icon': 'profile', 'label': 'Profile', 'route': '/profile'});
 
     return items;
   }

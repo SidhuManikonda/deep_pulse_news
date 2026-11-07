@@ -18,7 +18,11 @@ class StateRepositoryImpl implements StateRepository {
   @override
   Future<List<State>> getStates() async {
     try {
-      final response = await _apiService.get(AppConstants.states, useAuth: false, showErrorAlert: false);
+      final response = await _apiService.get(
+        AppConstants.states,
+        useAuth: false,
+        showErrorAlert: false,
+      );
 
       if (response.containsKey('error')) {
         throw Exception(response['error']);
@@ -34,7 +38,10 @@ class StateRepositoryImpl implements StateRepository {
   @override
   Future<State?> getStateById(int id) async {
     try {
-      final response = await _apiService.get('${AppConstants.states}/$id', useAuth: false);
+      final response = await _apiService.get(
+        '${AppConstants.states}/$id',
+        useAuth: false,
+      );
 
       if (response.containsKey('error')) {
         throw Exception(response['error']);

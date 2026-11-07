@@ -4,16 +4,16 @@ import 'package:deep_pulse_news/core/routing/app_router.dart';
 import 'package:deep_pulse_news/core/services/deep_link_service.dart';
 import 'package:deep_pulse_news/core/services/onboarding_storage.dart';
 import 'package:deep_pulse_news/core/services/push_notification_service.dart';
+import 'package:deep_pulse_news/features/home/ad_detail_screen.dart';
 import 'package:deep_pulse_news/features/news/news_detail_screen_v2.dart';
 import 'package:deep_pulse_news/main.dart' show navigatorKey;
 import 'package:deep_pulse_news/navigators/onboarding_navigator.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/constants/app_font_sizes.dart';
 import '../../core/utils/onboarding_manager.dart';
-import '../../shared/widgets/app_logo.dart';
+import '../../shared/widgets/app_wordmark.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -49,24 +49,17 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     _checkAuthAndNavigate();
   }
 
-  Future<void> _requestPermissions() async {
-    try {
-      await [
-        Permission.camera,
-        Permission.photos,
-        Permission.videos,
-        Permission.storage,
-      ].request().timeout(
-        const Duration(seconds: 10),
-        onTimeout: () {
-          debugPrint('[Splash] _requestPermissions timed out');
-          return <Permission, PermissionStatus>{};
-        },
-      );
-    } catch (e) {
-      debugPrint('[Splash] _requestPermissions error: $e');
-    }
-  }
+  // No permissions are requested here on purpose.
+  //
+  // Camera/photos/videos/storage used to be requested up front on every launch.
+  // That asked for camera before the app had any reason to use it, and because
+  // Android's "Only this time" grant is revoked once the app stops, the dialog
+  // came back on every single launch.
+  //
+  // MediaPickerService already asks for each permission at the point of use —
+  // and checks the current status first, so it prompts only when it actually
+  // needs to. That is both the Android-recommended pattern and the one Play
+  // expects for a justification-free camera request.
 
   Future<void> _checkAuthAndNavigate() async {
     debugPrint('[Splash] _checkAuthAndNavigate START');
@@ -75,15 +68,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     // Any hang in FCM / backend should not delay app startup.
     unawaited(PushNotificationService.instance.init());
 
-    try {
-      await Future.wait([
-        Future.delayed(const Duration(seconds: 3)),
-        _requestPermissions(),
-      ]);
-      debugPrint('[Splash] timer + permissions done');
-    } catch (e) {
-      debugPrint('[Splash] timer/permissions error: $e');
-    }
+    // Hold the splash long enough for the logo animation to read.
+    await Future.delayed(const Duration(seconds: 3));
+    debugPrint('[Splash] timer done');
 
     if (!mounted) {
       debugPrint('[Splash] not mounted, aborting navigation');
@@ -111,16 +98,33 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       final pendingNewsId = DeepLinkService.instance.consumePendingNewsId();
       if (pendingNewsId != null) {
         debugPrint('[Splash] Resuming deep link → news $pendingNewsId');
-        Navigator.of(context).pushNamedAndRemoveUntil(
-          AppRouter.home,
-          (_) => false,
-        );
+        Navigator.of(
+          context,
+        ).pushNamedAndRemoveUntil(AppRouter.home, (_) => false);
         // Defer to next frame so Home is on top before we push on it.
         WidgetsBinding.instance.addPostFrameCallback((_) {
           navigatorKey.currentState?.push(
             MaterialPageRoute(
               builder: (_) => NewsDetailScreenV2(initialNewsId: pendingNewsId),
               settings: RouteSettings(name: '/news/$pendingNewsId'),
+            ),
+          );
+        });
+        return;
+      }
+
+      // Same for a shared ad link: Home first, the ad on top of it.
+      final pendingAdId = DeepLinkService.instance.consumePendingAdId();
+      if (pendingAdId != null) {
+        debugPrint('[Splash] Resuming deep link → ad $pendingAdId');
+        Navigator.of(
+          context,
+        ).pushNamedAndRemoveUntil(AppRouter.home, (_) => false);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          navigatorKey.currentState?.push(
+            MaterialPageRoute(
+              builder: (_) => AdDetailScreen(adId: pendingAdId),
+              settings: RouteSettings(name: '/ads/$pendingAdId'),
             ),
           );
         });
@@ -157,17 +161,14 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    AppLogo(size: 80),
-                    const SizedBox(height: 24),
-                    Text(
-                      'Deep Pulse News',
-                      style: TextStyle(
-                        fontSize: scaledFontSize(32),
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).textTheme.headlineLarge?.color,
-                      ),
+                    // The wordmark carries the name in the brand's own type, so
+                    // the "Deep Pulse News" text that used to sit under the
+                    // mark would only repeat it.
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 32),
+                      child: AppWordmark(height: 88, borderRadius: 16),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 16),
                     Text(
                       'Stay Updated with Latest News',
                       style: TextStyle(

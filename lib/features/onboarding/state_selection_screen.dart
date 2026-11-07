@@ -15,7 +15,8 @@ class StateSelectionScreen extends ConsumerStatefulWidget {
   const StateSelectionScreen({super.key});
 
   @override
-  ConsumerState<StateSelectionScreen> createState() => _StateSelectionScreenState();
+  ConsumerState<StateSelectionScreen> createState() =>
+      _StateSelectionScreenState();
 }
 
 class _StateSelectionScreenState extends ConsumerState<StateSelectionScreen> {
@@ -37,8 +38,8 @@ class _StateSelectionScreenState extends ConsumerState<StateSelectionScreen> {
     final filtered = _query.isEmpty
         ? vm.states
         : vm.states
-            .where((s) => s.name.toLowerCase().contains(_query.toLowerCase()))
-            .toList();
+              .where((s) => s.name.toLowerCase().contains(_query.toLowerCase()))
+              .toList();
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -49,7 +50,10 @@ class _StateSelectionScreenState extends ConsumerState<StateSelectionScreen> {
             // ── Header ───────────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(
-                AppSpacing.sm, AppSpacing.sm, AppSpacing.lg, 0,
+                AppSpacing.sm,
+                AppSpacing.sm,
+                AppSpacing.lg,
+                0,
               ),
               child: Row(
                 children: [
@@ -73,7 +77,10 @@ class _StateSelectionScreenState extends ConsumerState<StateSelectionScreen> {
 
             Padding(
               padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm,
+                AppSpacing.lg,
+                AppSpacing.md,
+                AppSpacing.lg,
+                AppSpacing.sm,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -111,7 +118,11 @@ class _StateSelectionScreenState extends ConsumerState<StateSelectionScreen> {
               child: vm.isLoadingStates
                   ? buildLoadingList()
                   : vm.statesError != null
-                  ? buildErrorWidget(context, vm.statesError!, vm.retryLoadStates)
+                  ? buildErrorWidget(
+                      context,
+                      vm.statesError!,
+                      vm.retryLoadStates,
+                    )
                   : filtered.isEmpty
                   ? Center(
                       child: Text(

@@ -42,7 +42,8 @@ class LocationStepIndicator extends StatelessWidget {
   Widget _line(ThemeData theme, int afterStep) {
     final filled = afterStep < currentStep;
     return Container(
-      width: 32, height: 2,
+      width: 32,
+      height: 2,
       color: filled ? theme.appPrimary : const Color(0xFFE5E5EA),
     );
   }
@@ -52,7 +53,11 @@ class LocationStepIndicator extends StatelessWidget {
 class LocationSearchBar extends StatelessWidget {
   final String hint;
   final ValueChanged<String> onChanged;
-  const LocationSearchBar({super.key, required this.hint, required this.onChanged});
+  const LocationSearchBar({
+    super.key,
+    required this.hint,
+    required this.onChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -65,11 +70,21 @@ class LocationSearchBar extends StatelessWidget {
       ),
       child: TextField(
         onChanged: onChanged,
-        style: TextStyle(fontSize: scaledFontSize(14), color: theme.appTextPrimary),
+        style: TextStyle(
+          fontSize: scaledFontSize(14),
+          color: theme.appTextPrimary,
+        ),
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: TextStyle(fontSize: scaledFontSize(14), color: theme.appGrey400),
-          prefixIcon: Icon(Icons.search_rounded, size: 20, color: theme.appGrey400),
+          hintStyle: TextStyle(
+            fontSize: scaledFontSize(14),
+            color: theme.appGrey400,
+          ),
+          prefixIcon: Icon(
+            Icons.search_rounded,
+            size: 20,
+            color: theme.appGrey400,
+          ),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(vertical: 13),
           isDense: true,
@@ -126,7 +141,9 @@ class LocationListItem extends StatelessWidget {
                     name,
                     style: TextStyle(
                       fontSize: scaledFontSize(15),
-                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                      fontWeight: isSelected
+                          ? FontWeight.w600
+                          : FontWeight.w500,
                       color: isSelected
                           ? theme.appPrimary
                           : theme.appTextPrimary,
@@ -134,8 +151,11 @@ class LocationListItem extends StatelessWidget {
                   ),
                 ),
                 if (showChevron)
-                  Icon(Icons.chevron_right_rounded,
-                      size: 20, color: theme.appGrey400)
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    size: 20,
+                    color: theme.appGrey400,
+                  )
                 else
                   Icon(
                     isSelected
@@ -170,7 +190,18 @@ class _LocationItemSkeleton extends StatelessWidget {
   const _LocationItemSkeleton({required this.index});
 
   // Vary name-bar widths so it looks like real content
-  static const _widths = [0.65, 0.80, 0.55, 0.72, 0.60, 0.78, 0.50, 0.68, 0.75, 0.58];
+  static const _widths = [
+    0.65,
+    0.80,
+    0.55,
+    0.72,
+    0.60,
+    0.78,
+    0.50,
+    0.68,
+    0.75,
+    0.58,
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -196,7 +227,8 @@ class _LocationItemSkeleton extends StatelessWidget {
             ),
             const Spacer(),
             ShimmerWidget(
-              width: 16, height: 16,
+              width: 16,
+              height: 16,
               borderRadius: BorderRadius.circular(4),
             ),
           ],
@@ -246,7 +278,9 @@ Widget buildErrorWidget(
             style: OutlinedButton.styleFrom(
               foregroundColor: theme.appPrimary,
               side: BorderSide(color: theme.appPrimary),
-              shape: const RoundedRectangleBorder(borderRadius: AppRadius.smAll),
+              shape: const RoundedRectangleBorder(
+                borderRadius: AppRadius.smAll,
+              ),
               padding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.xl,
                 vertical: AppSpacing.md,

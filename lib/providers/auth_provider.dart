@@ -155,7 +155,6 @@
 //   }
 // }
 
-
 // // Convenience providers
 // final currentUserProvider = Provider<User?>((ref) {
 //   return ref.watch(authProvider).user;

@@ -15,12 +15,12 @@ class DateFormatter {
         return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
       }
     } else if (difference.inHours > 0) {
-      return difference.inHours == 1 
-          ? '1 hour ago' 
+      return difference.inHours == 1
+          ? '1 hour ago'
           : '${difference.inHours} hours ago';
     } else if (difference.inMinutes > 0) {
-      return difference.inMinutes == 1 
-          ? '1 minute ago' 
+      return difference.inMinutes == 1
+          ? '1 minute ago'
           : '${difference.inMinutes} minutes ago';
     } else {
       return 'Just now';

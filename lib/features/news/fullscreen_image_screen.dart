@@ -7,11 +7,8 @@ class FullscreenImageScreen extends StatefulWidget {
   final String imageUrl;
   final String? title;
 
-  const FullscreenImageScreen({
-    Key? key,
-    required this.imageUrl,
-    this.title,
-  }) : super(key: key);
+  const FullscreenImageScreen({Key? key, required this.imageUrl, this.title})
+    : super(key: key);
 
   @override
   State<FullscreenImageScreen> createState() => _FullscreenImageScreenState();
@@ -90,10 +87,7 @@ class _FullscreenImageScreenState extends State<FullscreenImageScreen> {
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.black.withOpacity(0.7),
-                      Colors.transparent,
-                    ],
+                    colors: [Colors.black.withOpacity(0.7), Colors.transparent],
                   ),
                 ),
                 child: Row(
@@ -111,7 +105,8 @@ class _FullscreenImageScreenState extends State<FullscreenImageScreen> {
                       Expanded(
                         child: Text(
                           widget.title!,
-                          style: TextStyle(                            color: Colors.white,
+                          style: TextStyle(
+                            color: Colors.white,
                             fontSize: scaledFontSize(15),
                             fontWeight: FontWeight.w600,
                           ),

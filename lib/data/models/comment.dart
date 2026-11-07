@@ -57,8 +57,8 @@ class Comment {
       repliesCount: json['replies_count'] ?? 0,
       replies: json['replies'] != null
           ? (json['replies'] as List<dynamic>)
-              .map((reply) => Comment.fromJson(reply))
-              .toList()
+                .map((reply) => Comment.fromJson(reply))
+                .toList()
           : [],
       likesCount: json['likes_count'] ?? 0,
       dislikesCount: json['dislikes_count'] ?? 0,

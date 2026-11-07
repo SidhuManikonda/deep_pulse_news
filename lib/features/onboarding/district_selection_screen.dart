@@ -30,8 +30,8 @@ class _DistrictSelectionScreenState
     final filtered = _query.isEmpty
         ? vm.districts
         : vm.districts
-            .where((d) => d.name.toLowerCase().contains(_query.toLowerCase()))
-            .toList();
+              .where((d) => d.name.toLowerCase().contains(_query.toLowerCase()))
+              .toList();
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -42,7 +42,10 @@ class _DistrictSelectionScreenState
             // ── Header ───────────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(
-                AppSpacing.sm, AppSpacing.sm, AppSpacing.lg, 0,
+                AppSpacing.sm,
+                AppSpacing.sm,
+                AppSpacing.lg,
+                0,
               ),
               child: Row(
                 children: [
@@ -66,7 +69,10 @@ class _DistrictSelectionScreenState
 
             Padding(
               padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm,
+                AppSpacing.lg,
+                AppSpacing.md,
+                AppSpacing.lg,
+                AppSpacing.sm,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -86,8 +92,11 @@ class _DistrictSelectionScreenState
                     const SizedBox(height: AppSpacing.xs),
                     Row(
                       children: [
-                        Icon(Icons.location_on_rounded,
-                            size: 14, color: theme.appPrimary),
+                        Icon(
+                          Icons.location_on_rounded,
+                          size: 14,
+                          color: theme.appPrimary,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           vm.selectedState!.name,
@@ -115,7 +124,10 @@ class _DistrictSelectionScreenState
                   ? buildLoadingList()
                   : vm.districtsError != null
                   ? buildErrorWidget(
-                      context, vm.districtsError!, vm.retryLoadDistricts)
+                      context,
+                      vm.districtsError!,
+                      vm.retryLoadDistricts,
+                    )
                   : filtered.isEmpty
                   ? Center(
                       child: Text(

@@ -31,12 +31,12 @@ class NotificationsViewModel extends ChangeNotifier {
     try {
       final response = await _newsRepository.getNews(status: 'pending');
       _pendingNews = response.data;
-          _pendingNews.sort((a, b) {
-      final aDate = a.createdAt;
-      final bDate = b.createdAt;
+      _pendingNews.sort((a, b) {
+        final aDate = a.createdAt;
+        final bDate = b.createdAt;
 
-      return bDate.compareTo(aDate); // Descending (latest first)
-    });
+        return bDate.compareTo(aDate); // Descending (latest first)
+      });
     } catch (e) {
       _error = e.toString();
     } finally {
@@ -112,7 +112,7 @@ class NotificationsViewModel extends ChangeNotifier {
       debugPrint(
         '[Notifications] push for news ${news.id}: '
         '${result == null ? 'FAILED' : 'success=${result.successCount}, '
-              'failure=${result.failureCount}'}',
+                  'failure=${result.failureCount}'}',
       );
     } catch (e) {
       debugPrint('[Notifications] sendNotification threw: $e');

@@ -3,7 +3,8 @@ import 'dart:ui';
 const double _referenceWidth = 375.0;
 
 double _scale() {
-  final width = PlatformDispatcher.instance.views.first.physicalSize.width /
+  final width =
+      PlatformDispatcher.instance.views.first.physicalSize.width /
       PlatformDispatcher.instance.views.first.devicePixelRatio;
   return (width / _referenceWidth).clamp(0.85, 1.15);
 }

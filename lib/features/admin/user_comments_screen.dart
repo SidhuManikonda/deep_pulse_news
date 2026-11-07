@@ -51,8 +51,11 @@ class _UserCommentsScreenState extends ConsumerState<UserCommentsScreen> {
       elevation: 0,
       surfaceTintColor: Colors.transparent,
       leading: IconButton(
-        icon: Icon(Icons.arrow_back_ios_new_rounded,
-            color: theme.appTextPrimary, size: 20),
+        icon: Icon(
+          Icons.arrow_back_ios_new_rounded,
+          color: theme.appTextPrimary,
+          size: 20,
+        ),
         onPressed: () => Navigator.pop(context),
       ),
       title: Text(
@@ -117,20 +120,23 @@ class _UserCommentsScreenState extends ConsumerState<UserCommentsScreen> {
                 Text(
                   user.email,
                   style: TextStyle(
-                      fontSize: scaledFontSize(13), color: theme.appTextSecondary),
+                    fontSize: scaledFontSize(13),
+                    color: theme.appTextSecondary,
+                  ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   user.mobile,
-                  style:
-                      TextStyle(fontSize: scaledFontSize(13), color: theme.appTextSecondary),
+                  style: TextStyle(
+                    fontSize: scaledFontSize(13),
+                    color: theme.appTextSecondary,
+                  ),
                 ),
               ],
             ),
           ),
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
               color: user.isActive
                   ? Colors.green.withValues(alpha: 0.1)
@@ -151,7 +157,7 @@ class _UserCommentsScreenState extends ConsumerState<UserCommentsScreen> {
     );
   }
 
-  Widget _buildBody(AdminUserManagementController  controller, ThemeData theme) {
+  Widget _buildBody(AdminUserManagementController controller, ThemeData theme) {
     if (controller.isLoadingComments) {
       return Center(
         child: CircularProgressIndicator(
@@ -170,8 +176,10 @@ class _UserCommentsScreenState extends ConsumerState<UserCommentsScreen> {
             const SizedBox(height: 12),
             Text(
               'Failed to load comments',
-              style:
-                  TextStyle(fontSize: scaledFontSize(15), color: theme.appTextSecondary),
+              style: TextStyle(
+                fontSize: scaledFontSize(15),
+                color: theme.appTextSecondary,
+              ),
             ),
             const SizedBox(height: 16),
             ElevatedButton.icon(
@@ -184,7 +192,8 @@ class _UserCommentsScreenState extends ConsumerState<UserCommentsScreen> {
                 backgroundColor: theme.appPrimary,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
             ),
           ],
@@ -199,15 +208,15 @@ class _UserCommentsScreenState extends ConsumerState<UserCommentsScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.chat_bubble_outline,
-                size: 56, color: theme.appGrey400),
+            Icon(Icons.chat_bubble_outline, size: 56, color: theme.appGrey400),
             const SizedBox(height: 12),
             Text(
               'No comments yet',
               style: TextStyle(
-                  fontSize: scaledFontSize(15),
-                  color: theme.appTextSecondary,
-                  fontWeight: FontWeight.w500),
+                fontSize: scaledFontSize(15),
+                color: theme.appTextSecondary,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ],
         ),
@@ -246,14 +255,18 @@ class _UserCommentsScreenState extends ConsumerState<UserCommentsScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
               color: theme.appGrey50,
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(14)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(14),
+              ),
               border: Border(bottom: BorderSide(color: theme.appDivider)),
             ),
             child: Row(
               children: [
-                Icon(Icons.article_outlined,
-                    size: 15, color: theme.appTextSecondary),
+                Icon(
+                  Icons.article_outlined,
+                  size: 15,
+                  color: theme.appTextSecondary,
+                ),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
@@ -291,23 +304,35 @@ class _UserCommentsScreenState extends ConsumerState<UserCommentsScreen> {
             padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
             child: Row(
               children: [
-                Icon(Icons.access_time_rounded,
-                    size: 13, color: theme.appTextLight),
+                Icon(
+                  Icons.access_time_rounded,
+                  size: 13,
+                  color: theme.appTextLight,
+                ),
                 const SizedBox(width: 4),
                 Text(
                   timeAgo,
-                  style: TextStyle(fontSize: scaledFontSize(12), color: theme.appTextLight),
+                  style: TextStyle(
+                    fontSize: scaledFontSize(12),
+                    color: theme.appTextLight,
+                  ),
                 ),
                 const SizedBox(width: 4),
                 Text(
                   '· ${_formatDate(entry.comment.createdAt.toLocal())}',
-                  style: TextStyle(fontSize: scaledFontSize(11), color: theme.appTextLight),
+                  style: TextStyle(
+                    fontSize: scaledFontSize(11),
+                    color: theme.appTextLight,
+                  ),
                 ),
                 const Spacer(),
                 TextButton.icon(
                   onPressed: () => _confirmDelete(entry),
-                  icon: const Icon(Icons.delete_outline_rounded,
-                      size: 18, color: Colors.red),
+                  icon: const Icon(
+                    Icons.delete_outline_rounded,
+                    size: 18,
+                    color: Colors.red,
+                  ),
                   label: Text(
                     'Delete',
                     style: TextStyle(
@@ -392,9 +417,7 @@ class _UserCommentsScreenState extends ConsumerState<UserCommentsScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         title: const Text('Delete comment?'),
         content: Text(
           'This will permanently remove the comment:\n\n"${entry.comment.content}"',
@@ -432,8 +455,18 @@ class _UserCommentsScreenState extends ConsumerState<UserCommentsScreen> {
 
   String _formatDate(DateTime dt) {
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     final h = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
     final m = dt.minute.toString().padLeft(2, '0');

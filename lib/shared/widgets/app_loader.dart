@@ -93,7 +93,10 @@ class NewsCardSkeleton extends StatelessWidget {
 
     return Container(
       margin: const EdgeInsets.fromLTRB(
-        AppSpacing.sm, AppSpacing.sm, AppSpacing.sm, AppSpacing.sm,
+        AppSpacing.sm,
+        AppSpacing.sm,
+        AppSpacing.sm,
+        AppSpacing.sm,
       ),
       decoration: BoxDecoration(
         color: theme.appCard,
@@ -113,28 +116,55 @@ class NewsCardSkeleton extends StatelessWidget {
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(
-              AppSpacing.md, AppSpacing.md, AppSpacing.md, AppSpacing.sm,
+              AppSpacing.md,
+              AppSpacing.md,
+              AppSpacing.md,
+              AppSpacing.sm,
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Title
-                ShimmerBox(width: w * 0.62, height: 18, borderRadius: AppRadius.xsAll),
+                ShimmerBox(
+                  width: w * 0.62,
+                  height: 18,
+                  borderRadius: AppRadius.xsAll,
+                ),
                 const SizedBox(height: AppSpacing.sm),
                 // Description line 1
-                ShimmerBox(width: double.infinity, height: 13, borderRadius: AppRadius.xsAll),
+                ShimmerBox(
+                  width: double.infinity,
+                  height: 13,
+                  borderRadius: AppRadius.xsAll,
+                ),
                 const SizedBox(height: 5),
                 // Description line 2
-                ShimmerBox(width: w * 0.52, height: 13, borderRadius: AppRadius.xsAll),
+                ShimmerBox(
+                  width: w * 0.52,
+                  height: 13,
+                  borderRadius: AppRadius.xsAll,
+                ),
                 const SizedBox(height: AppSpacing.md),
                 // Action bar
                 Row(
                   children: [
-                    ShimmerBox(width: 52, height: 12, borderRadius: AppRadius.xsAll),
+                    ShimmerBox(
+                      width: 52,
+                      height: 12,
+                      borderRadius: AppRadius.xsAll,
+                    ),
                     const SizedBox(width: AppSpacing.lg),
-                    ShimmerBox(width: 46, height: 12, borderRadius: AppRadius.xsAll),
+                    ShimmerBox(
+                      width: 46,
+                      height: 12,
+                      borderRadius: AppRadius.xsAll,
+                    ),
                     const SizedBox(width: AppSpacing.lg),
-                    ShimmerBox(width: 46, height: 12, borderRadius: AppRadius.xsAll),
+                    ShimmerBox(
+                      width: 46,
+                      height: 12,
+                      borderRadius: AppRadius.xsAll,
+                    ),
                   ],
                 ),
                 const SizedBox(height: AppSpacing.sm),
@@ -171,9 +201,10 @@ class _VideoLoadingPlaceholderState extends State<VideoLoadingPlaceholder>
       vsync: this,
       duration: const Duration(milliseconds: 900),
     )..repeat(reverse: true);
-    _pulse = Tween<double>(begin: 0.82, end: 1.0).animate(
-      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
-    );
+    _pulse = Tween<double>(
+      begin: 0.82,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
   }
 
   @override
@@ -197,7 +228,8 @@ class _VideoLoadingPlaceholderState extends State<VideoLoadingPlaceholder>
                 alignment: Alignment.center,
                 children: [
                   SizedBox(
-                    width: 54, height: 54,
+                    width: 54,
+                    height: 54,
                     child: CircularProgressIndicator(
                       strokeWidth: 2.5,
                       valueColor: AlwaysStoppedAnimation<Color>(
@@ -245,7 +277,8 @@ class InlineLoader extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           SizedBox(
-            width: 34, height: 34,
+            width: 34,
+            height: 34,
             child: CircularProgressIndicator(
               strokeWidth: 2.5,
               valueColor: AlwaysStoppedAnimation<Color>(theme.appPrimary),
@@ -321,7 +354,8 @@ class _AppPageLoaderState extends State<AppPageLoader>
           children: [
             // App logo in frosted circle
             Container(
-              width: 80, height: 80,
+              width: 80,
+              height: 80,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: Colors.white.withValues(alpha: 0.12),
@@ -338,7 +372,8 @@ class _AppPageLoaderState extends State<AppPageLoader>
             ClipRRect(
               borderRadius: AppRadius.xsAll,
               child: SizedBox(
-                width: 140, height: 3,
+                width: 140,
+                height: 3,
                 child: AnimatedBuilder(
                   animation: _bar,
                   builder: (_, __) => Container(

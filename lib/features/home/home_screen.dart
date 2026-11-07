@@ -27,7 +27,7 @@ import '../../data/models/topic.dart';
 import '../../enums/user_role.dart';
 import '../../extensions/user_extensions.dart';
 import '../../shared/widgets/cached_image_widget.dart';
-import '../../shared/widgets/news_ad_block.dart';
+import '../../shared/widgets/gradient_icon.dart';
 import '../../data/models/feed_entry.dart';
 import 'widgets/full_page_ad_card.dart';
 import '../../shared/widgets/report_bottom_sheet.dart';
@@ -37,9 +37,11 @@ import '../news/fullscreen_video_screen.dart';
 import '../news/news_detail_screen_v2.dart';
 import '../news/news_poster_screen.dart';
 import '../news/news_upload_screen.dart';
+import '../../main.dart' show routeObserver;
 import '../notifications/notifications_screen.dart';
 import '../settings/settings_screen.dart';
 import '../../shared/widgets/app_logo.dart';
+import '../../shared/widgets/app_wordmark.dart';
 import '../../shared/widgets/audio_player_widget.dart';
 import 'home_view_model.dart';
 
@@ -50,12 +52,10 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends ConsumerState<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen> with RouteAware {
   final _videoPreloader = VideoPreloaderService();
   final _newsViewTracker = NewsViewTrackerService();
   final NotificationRepository _notifRepo = NotificationRepositoryImpl();
-  int _unreadNotifications = 0;
-  final Map<int, int> _currentCarouselPages = {};
 
   /// Holds off media preloading until the feed stops moving — see
   /// [_onFeedPageSettled].
@@ -79,7 +79,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   // so switching tabs can't carry a stale scroll offset across.
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of<void>(context);
+    if (route != null) routeObserver.subscribe(this, route);
+  }
+
+  /// Another screen has been pushed over the feed. The feed is not disposed
+  /// while it sits underneath, so without this the advert carries on playing —
+  /// audible from whatever screen the reader moved to.
+  @override
+  void didPushNext() {
+    _videoPreloader.pauseAllVideos();
+    _newsViewTracker.cancelPendingView();
+  }
+
+  @override
   void dispose() {
+    routeObserver.unsubscribe(this);
+    // Leaving the feed for good should not leave a controller playing into a
+    // screen that has no way to stop it.
+    _videoPreloader.pauseAllVideos();
     // Stop any pending dwell timer so a navigated-away article isn't
     // counted as viewed.
     _newsViewTracker.cancelPendingView();
@@ -166,9 +186,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   /// when logged out — the repository returns 0 on any failure.
   Future<void> _loadUnreadCount() async {
     final count = await _notifRepo.getUnreadCount();
-    if (mounted && count != _unreadNotifications) {
-      setState(() => _unreadNotifications = count);
-    }
+    if (!mounted) return;
+    final notifier = ref.read(unreadNotificationsProvider.notifier);
+    if (count != notifier.state) notifier.state = count;
   }
 
   @override
@@ -259,24 +279,64 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Logo
-          Row(
-            children: [
-              AppLogo(size: 36, borderRadius: 8),
-              const SizedBox(width: 8),
-              Text(
-                'Deep Pulse',
-                style: TextStyle(
-                  fontSize: appFontSizeHeader,
-                  fontWeight: FontWeight.bold,
-                  color: Theme.of(context).textTheme.headlineLarge?.color,
+          // Logo. The wordmark ships as one image rather than icon-plus-text so
+          // the brand's gradient lettering survives — a Text widget can't
+          // reproduce it.
+          //
+          // The artwork carries its own dark ground baked in (it's a JPEG, so
+          // there is no alpha to knock out). Left bare on a white header that
+          // reads as a pasted screenshot, so it is given a rounded crop and a
+          // soft shadow instead: the dark panel then looks like a deliberate
+          // masthead badge rather than a rectangle nobody meant to leave there.
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.20),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
                 ),
+              ],
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Image.asset(
+              'assets/images/dp_banner.jpeg',
+              // A fixed size rather than the full width up to the avatar: the
+              // source is ~3:1 with no dead margin to trim, so every extra pixel
+              // of width at a fixed height comes out of BoxFit.fill stretching
+              // the artwork sideways. 200x42 is a middle setting — longer than
+              // the artwork's natural ~130 at this height, short of the ~2x
+              // stretch that spanning the whole header would need.
+              //
+              // A wide-format export (~1470x210) would remove the trade-off.
+              width: 150,
+              height: 38,
+              fit: BoxFit.fill,
+              // Falls back to the original icon-plus-text lockup, so a
+              // missing or failed asset still leaves a usable header.
+              errorBuilder: (_, __, ___) => Row(
+                children: [
+                  AppLogo(size: 36, borderRadius: 8),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Deep Pulse',
+                    style: TextStyle(
+                      fontSize: appFontSizeHeader,
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).textTheme.headlineLarge?.color,
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
 
           // Profile icon
           InkWell(
+            // Keeps the tap ripple inside the circle rather than painting a
+            // square behind the artwork.
+            customBorder: const CircleBorder(),
             onTap: () async {
               // Pause any playing video before leaving the home screen.
               // Without this, audio kept playing in the background while the
@@ -287,13 +347,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 MaterialPageRoute(builder: (context) => ProfileScreen()),
               );
             },
-            child: CircleAvatar(
-              radius: 16,
-              backgroundColor: Theme.of(context).appGrey300,
-              child: Icon(
-                Icons.person,
-                size: 20,
-                color: Theme.of(context).textTheme.bodyLarge?.color,
+            // The supplied artwork is square, with its gold ring inscribed in
+            // the frame — clipping to an oval drops the painted corners and
+            // leaves the ring as the avatar's own edge.
+            child: ClipOval(
+              child: Image.asset(
+                'assets/images/profile_icon.jpeg',
+                width: 38,
+                height: 38,
+                fit: BoxFit.cover,
+                // Falls back to the plain person avatar, so a missing asset
+                // still leaves a tappable profile button.
+                errorBuilder: (_, __, ___) => CircleAvatar(
+                  radius: 21,
+                  backgroundColor: Theme.of(context).appGrey300,
+                  child: Icon(
+                    Icons.person,
+                    size: 20,
+                    color: Theme.of(context).textTheme.bodyLarge?.color,
+                  ),
+                ),
               ),
             ),
           ),
@@ -561,7 +634,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     // left, and never two PageViews sharing one controller.
     // Resume each tab where the reader left it. Clamped because a refresh can
     // return a shorter list than the one they were scrolled into.
-    final tabKey = homeViewModel.selectedLocationTab;
+    //
+    // The key carries the chosen location as well as the tab name. A tab name
+    // alone is not a stable identity for a feed: change state/district/mandal
+    // and "Your Area" still says "Your Area" while holding entirely different
+    // articles. Keyed on the name only, the reader was dropped into the middle
+    // of a feed they had never scrolled — the remembered index from the old
+    // location applied to the new one. Including the location means a location
+    // change is a different key, so the pager rebuilds from page 0, and each
+    // location keeps its own place if the reader switches back.
+    final tabKey =
+        '${homeViewModel.selectedLocationTab}'
+        '@${homeViewModel.selectedState?.id ?? '-'}'
+        '/${homeViewModel.selectedDistrict?.id ?? '-'}'
+        '/${homeViewModel.selectedMandal?.id ?? '-'}';
     final remembered = (_tabPositions[tabKey] ?? 0).clamp(
       0,
       entries.length - 1,
@@ -569,6 +655,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     return _TabFeedPager(
       key: ValueKey(tabKey),
+      tabKey: tabKey,
       itemCount: entries.length,
       initialPage: remembered,
       onNearEnd: () => ref.read(homeViewModelProvider).loadMoreNews(),
@@ -576,7 +663,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       // runs — the pager shows its own spinner instead of blanking to a
       // skeleton and losing the reader's place.
       onRefresh: () async {
-        _tabPositions[homeViewModel.selectedLocationTab] = 0;
+        // Same composite key the position was stored under — writing to the
+        // bare tab name here would leave the remembered index untouched.
+        _tabPositions[tabKey] = 0;
         await ref.read(homeViewModelProvider).loadNewsData(silent: true);
       },
       onPageSettled: (index) {
@@ -791,7 +880,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             fontWeight: FontWeight.bold,
                             // Author-picked title color, falling back to the
                             // theme color when none was set.
-                            color: colorFromHex(newsItem.titleColor) ??
+                            color:
+                                colorFromHex(newsItem.titleColor) ??
                                 Theme.of(context).appTextPrimary,
                           ),
                           maxLines: 2,
@@ -805,22 +895,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             newsItem,
                           ),
                         ),
-                        // Only the first ad runs in the feed. A card is exactly
-                        // one screen tall, so every pixel here is taken from
-                        // the story — the second creative gets its run on the
-                        // detail page, where the article can scroll.
-                        //
-                        // Sized rather than flexible on purpose: the
-                        // description above measures itself against whatever
-                        // height is left, so a fixed strip makes it truncate to
-                        // fit instead of overflowing the card.
-                        if (newsItem.ads.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          NewsAdBlock(
-                            ad: newsItem.ads.first,
-                            maxHeight: 96,
-                          ),
-                        ],
+                        // No advert on the feed card. A card is exactly one
+                        // screen tall, so a creative here is taken straight out
+                        // of the story's own space — and at 96px it was too
+                        // small to do the advertiser any good either. Both
+                        // creatives now run on the detail page, where the
+                        // article can scroll and they get real room.
                       ],
                     ),
                   ),
@@ -952,21 +1032,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     color: Colors.black.withOpacity(0.4),
                     borderRadius: AppRadius.smAll,
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      AppLogo(size: 16, borderRadius: 4),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Deep Pulse',
-                        style: TextStyle(
-                          fontSize: scaledFontSize(10),
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
+                  // The wordmark spells the name itself, so the badge no longer
+                  // pairs the square mark with a "Deep Pulse" label.
+                  child: const AppWordmark(height: 18, borderRadius: 4),
                 ),
               ),
               if (media.type == 'video')
@@ -1005,8 +1073,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       );
     } else {
       // Multiple media items with PageView slider (up to 3)
-      final currentCarouselPage = _currentCarouselPages[newsItemIndex] ?? 0;
-
       return SizedBox(
         width: double.infinity,
         height: MediaQuery.of(context).size.height * 0.28,
@@ -1017,16 +1083,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               child: PageView.builder(
                 itemCount: mediaCount,
                 onPageChanged: (page) {
-                  setState(() {
-                    _currentCarouselPages[newsItemIndex] = page;
-                  });
+                  // No setState: this used to rebuild the whole home screen
+                  // just to move the dots under one card's photos.
+                  ref.read(carouselPageProvider(newsItemIndex).notifier).state =
+                      page;
                   // Pause all videos in this carousel when switching pages
                   _videoPreloader.pauseAllVideos();
                 },
                 itemBuilder: (context, carouselIndex) {
                   final media = mediaItems[carouselIndex];
+                  // Only this photo's own "am I showing?" boolean, so moving
+                  // the carousel wakes the two slides that changed and nothing
+                  // else.
                   final isMediaVisible =
-                      isVisible && carouselIndex == currentCarouselPage;
+                      isVisible &&
+                      ref.watch(
+                        carouselPageProvider(
+                          newsItemIndex,
+                        ).select((page) => page == carouselIndex),
+                      );
 
                   return SizedBox.expand(
                     child: media.type == 'video'
@@ -1075,23 +1150,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               bottom: 10,
               left: 0,
               right: 0,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(
-                  mediaCount,
-                  (index) => AnimatedContainer(
-                    duration: const Duration(milliseconds: 250),
-                    margin: const EdgeInsets.symmetric(horizontal: 3),
-                    width: index == currentCarouselPage ? 24 : 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: index == currentCarouselPage
-                          ? Colors.white
-                          : Colors.white.withOpacity(0.4),
-                      borderRadius: AppRadius.xsAll,
+              child: Consumer(
+                builder: (context, ref, _) {
+                  final currentCarouselPage = ref.watch(
+                    carouselPageProvider(newsItemIndex),
+                  );
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(
+                      mediaCount,
+                      (index) => AnimatedContainer(
+                        duration: const Duration(milliseconds: 250),
+                        margin: const EdgeInsets.symmetric(horizontal: 3),
+                        width: index == currentCarouselPage ? 24 : 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: index == currentCarouselPage
+                              ? Colors.white
+                              : Colors.white.withValues(alpha: 0.4),
+                          borderRadius: AppRadius.xsAll,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
+                  );
+                },
               ),
             ),
             // Timestamp overlay at bottom left
@@ -1127,56 +1209,54 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   color: Colors.black.withOpacity(0.4),
                   borderRadius: AppRadius.smAll,
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    AppLogo(size: 16, borderRadius: 4),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Deep Pulse',
-                      style: TextStyle(
-                        fontSize: scaledFontSize(10),
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
+                child: const AppWordmark(height: 18, borderRadius: 4),
               ),
             ),
 
-            // FULLSCREEN ICON (only for videos)
-            if (mediaItems[currentCarouselPage].type == 'video')
-              Positioned(
-                top: 10,
-                left: 10,
-                child: InkWell(
-                  onTap: () {
-                    final currentMedia = mediaItems[currentCarouselPage];
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => FullscreenVideoScreen(
-                          videoUrl: currentMedia.fileUrl,
-                          title: _getNewsTitle(newsItem),
-                          createdAt: newsItem.displayTime,
+            // FULLSCREEN ICON (only for videos) — depends on which slide is
+            // showing, so it watches the page rather than the card rebuilding.
+            Positioned(
+              top: 10,
+              left: 10,
+              // Consumer inside the Positioned, not around it: Positioned is a
+              // ParentDataWidget and belongs directly under the Stack.
+              child: Consumer(
+                builder: (context, ref, _) {
+                  final currentCarouselPage = ref.watch(
+                    carouselPageProvider(newsItemIndex),
+                  );
+                  if (mediaItems[currentCarouselPage].type != 'video') {
+                    return const SizedBox.shrink();
+                  }
+                  return InkWell(
+                    onTap: () {
+                      final currentMedia = mediaItems[currentCarouselPage];
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => FullscreenVideoScreen(
+                            videoUrl: currentMedia.fileUrl,
+                            title: _getNewsTitle(newsItem),
+                            createdAt: newsItem.displayTime,
+                          ),
                         ),
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.6),
+                        borderRadius: AppRadius.xsAll,
                       ),
-                    );
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.6),
-                      borderRadius: AppRadius.xsAll,
+                      child: const Icon(
+                        Icons.fullscreen,
+                        color: Colors.white,
+                        size: 22,
+                      ),
                     ),
-                    child: const Icon(
-                      Icons.fullscreen,
-                      color: Colors.white,
-                      size: 22,
-                    ),
-                  ),
-                ),
+                  );
+                },
               ),
+            ),
           ],
         ),
       );
@@ -1299,13 +1379,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
+  /// One colour per action on the article bar.
+  ///
+  /// Six grey glyphs in a row take reading to tell apart; six colours are
+  /// picked out at a glance, and the count beside each one inherits the same
+  /// colour so the pair reads as a unit.
+  ///
+  /// Colour marks *which* action, never *whether you've taken it* — that stays
+  /// the icon's own job, outlined before and filled after. Using colour for
+  /// both would leave a liked article and an unliked one looking identical.
+  static const Color _kLikeColor = Color(0xFF1E88E5); // blue
+  static const Color _kDislikeColor = Color(0xFFE53935); // red
+  static const Color _kCommentColor = Color(0xFF8E24AA); // purple
+  static const Color _kShareColor = Color(0xFF43A047); // green
+  static const Color _kViewsColor = Color(0xFFFB8C00); // orange
+  static const Color _kMoreColor = Color(0xFF1E88E5); // blue, as the like icon
+
   Widget _buildNewInteractionBar(BuildContext context, News newsItem) {
     return Consumer(
       builder: (context, ref, child) {
         final authViewModel = ref.watch(authViewModelProvider);
         final currentUser = authViewModel.user;
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 1),
           decoration: BoxDecoration(
             border: Border(
               top: BorderSide(
@@ -1322,166 +1418,160 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   // Like & Dislike — single Consumer for both
-                      Consumer(
-                        builder: (context, ref, child) {
-                          final homeViewModel = ref.watch(
-                            homeViewModelProvider,
-                          );
-                          final item = homeViewModel.newsItems.firstWhere(
-                            (n) => n.id == newsItem.id,
-                            orElse: () => newsItem,
-                          );
-                          final likeStatus =
-                              homeViewModel.likeStatuses[newsItem.id] ??
-                              LikeStatus.neutral;
-                          final isLiked = likeStatus == LikeStatus.liked;
-                          final isDisliked = likeStatus == LikeStatus.disliked;
+                  Consumer(
+                    builder: (context, ref, child) {
+                      final homeViewModel = ref.watch(homeViewModelProvider);
+                      final item = homeViewModel.newsItems.firstWhere(
+                        (n) => n.id == newsItem.id,
+                        orElse: () => newsItem,
+                      );
+                      final likeStatus =
+                          homeViewModel.likeStatuses[newsItem.id] ??
+                          LikeStatus.neutral;
+                      final isLiked = likeStatus == LikeStatus.liked;
+                      final isDisliked = likeStatus == LikeStatus.disliked;
 
-                          return Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              _buildIconWithCount(
-                                context,
-                                isLiked
-                                    ? Icons.thumb_up
-                                    : Icons.thumb_up_outlined,
-                                item.likesCount.toString(),
-                                () async {
-                                  final isAuthenticated =
-                                      await AuthHelper.requireAuth(
-                                        context,
-                                        ref,
-                                        title: 'Login to Like',
-                                        message:
-                                            'Please login to like this news article.',
-                                      );
-                                  if (isAuthenticated) {
-                                    ref
-                                        .read(homeViewModelProvider)
-                                        .likeDislike(
-                                          likeableId: newsItem.id,
-                                          likeableType: LikeableType.news,
-                                          isLike: true,
-                                        );
-                                  }
-                                },
-                                color: isLiked
-                                    ? Colors.blue
-                                    : Theme.of(context).appGrey600,
-                              ),
-                              _buildIconWithCount(
-                                context,
-                                isDisliked
-                                    ? Icons.thumb_down
-                                    : Icons.thumb_down_outlined,
-                                item.dislikesCount.toString(),
-                                () async {
-                                  final isAuthenticated =
-                                      await AuthHelper.requireAuth(
-                                        context,
-                                        ref,
-                                        title: 'Login to Dislike',
-                                        message:
-                                            'Please login to dislike this news article.',
-                                      );
-                                  if (isAuthenticated) {
-                                    ref
-                                        .read(homeViewModelProvider)
-                                        .likeDislike(
-                                          likeableId: newsItem.id,
-                                          likeableType: LikeableType.news,
-                                          isLike: false,
-                                        );
-                                  }
-                                },
-                                color: isDisliked
-                                    ? Colors.red
-                                    : Theme.of(context).appGrey600,
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                      if (newsItem.isComment)
-                        // Comments count
-                        _buildIconWithCount(
-                          context,
-                          Icons.comment_outlined,
-                          newsItem.commentsCount.toString(),
-                          () async {
-                            _videoPreloader.pauseAllVideos();
-                            final isAuthenticated = await AuthHelper.requireAuth(
-                              context,
-                              ref,
-                              title: 'Login to Comment',
-                              message:
-                                  'Please login to comment on this news article.',
-                            );
-                            if (isAuthenticated) {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => CommentsScreen(
-                                    news: newsItem,
-                                    onCommentPosted: () {
-                                      // Refresh news data to update comment count
-                                      ref.read(homeViewModelProvider).refresh();
-                                    },
-                                  ),
-                                ),
-                              );
-                            }
-                          },
-                        ),
-                      // Shares count
-                      _buildIconWithCount(
-                        context,
-                        Icons.share_outlined,
-                        newsItem.sharesCount.toString(),
-                        () async {
-                          final isAuthenticated = await AuthHelper.requireAuth(
+                      return Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildIconWithCount(
                             context,
-                            ref,
-                            title: 'Login to Share',
-                            message: 'Please login to share this news article.',
-                          );
-                          if (!isAuthenticated) return;
-                          try {
-                            // Use the share_url from the news model
-                            final shareUrl = newsItem.shareUrl.isNotEmpty
-                                ? newsItem.shareUrl
-                                : 'https://api.deeppulse.media/news/${newsItem.id}'; // fallback
-
-                            // Open native share dialog directly
-                            await Share.share(shareUrl);
-
-                            // Call the share API after share dialog closes
-                            await ref
-                                .read(homeViewModelProvider)
-                                .shareNews(newsItem.id, 'general');
-                          } catch (e) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Failed to share: $e')),
-                            );
-                          }
-                        },
-                      ),
-                      // Views count
-                      if (currentUser != null &&
-                          (currentUser.primaryRole.value == "admin" ||
-                              currentUser.primaryRole.value == "sub_admin"))
-                        _buildIconWithCount(
+                            isLiked ? Icons.thumb_up : Icons.thumb_up_outlined,
+                            item.likesCount.toString(),
+                            () async {
+                              final isAuthenticated =
+                                  await AuthHelper.requireAuth(
+                                    context,
+                                    ref,
+                                    title: 'Login to Like',
+                                    message:
+                                        'Please login to like this news article.',
+                                  );
+                              if (isAuthenticated) {
+                                ref
+                                    .read(homeViewModelProvider)
+                                    .likeDislike(
+                                      likeableId: newsItem.id,
+                                      likeableType: LikeableType.news,
+                                      isLike: true,
+                                    );
+                              }
+                            },
+                            color: _kLikeColor,
+                          ),
+                          _buildIconWithCount(
+                            context,
+                            isDisliked
+                                ? Icons.thumb_down
+                                : Icons.thumb_down_outlined,
+                            item.dislikesCount.toString(),
+                            () async {
+                              final isAuthenticated = await AuthHelper.requireAuth(
+                                context,
+                                ref,
+                                title: 'Login to Dislike',
+                                message:
+                                    'Please login to dislike this news article.',
+                              );
+                              if (isAuthenticated) {
+                                ref
+                                    .read(homeViewModelProvider)
+                                    .likeDislike(
+                                      likeableId: newsItem.id,
+                                      likeableType: LikeableType.news,
+                                      isLike: false,
+                                    );
+                              }
+                            },
+                            color: _kDislikeColor,
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                  if (newsItem.isComment)
+                    // Comments count
+                    _buildIconWithCount(
+                      context,
+                      Icons.comment,
+                      newsItem.commentsCount.toString(),
+                      () async {
+                        _videoPreloader.pauseAllVideos();
+                        final isAuthenticated = await AuthHelper.requireAuth(
                           context,
-                          Icons.visibility_outlined,
-                          newsItem.viewsCount.toString(),
-                          () {},
-                        ),
+                          ref,
+                          title: 'Login to Comment',
+                          message:
+                              'Please login to comment on this news article.',
+                        );
+                        if (isAuthenticated) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => CommentsScreen(
+                                news: newsItem,
+                                onCommentPosted: () {
+                                  // Refresh news data to update comment count
+                                  ref.read(homeViewModelProvider).refresh();
+                                },
+                              ),
+                            ),
+                          );
+                        }
+                      },
+                      color: _kCommentColor,
+                    ),
+                  // Shares count
+                  _buildIconWithCount(
+                    context,
+                    Icons.share,
+                    newsItem.sharesCount.toString(),
+                    () async {
+                      final isAuthenticated = await AuthHelper.requireAuth(
+                        context,
+                        ref,
+                        title: 'Login to Share',
+                        message: 'Please login to share this news article.',
+                      );
+                      if (!isAuthenticated) return;
+                      try {
+                        // Use the share_url from the news model
+                        final shareUrl = newsItem.shareUrl.isNotEmpty
+                            ? newsItem.shareUrl
+                            : 'https://api.deeppulse.media/news/${newsItem.id}'; // fallback
+
+                        // Open native share dialog directly
+                        await Share.share(shareUrl);
+
+                        // Call the share API after share dialog closes
+                        await ref
+                            .read(homeViewModelProvider)
+                            .shareNews(newsItem.id, 'general');
+                      } catch (e) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Failed to share: $e')),
+                        );
+                      }
+                    },
+                    color: _kShareColor,
+                  ),
+                  // Views count
+                  if (currentUser != null &&
+                      (currentUser.primaryRole.value == "admin" ||
+                          currentUser.primaryRole.value == "sub_admin"))
+                    _buildIconWithCount(
+                      context,
+                      Icons.visibility,
+                      newsItem.viewsCount.toString(),
+                      () {},
+                      color: _kViewsColor,
+                    ),
                   // Popup menu — show for all users
                   PopupMenuButton<String>(
                     offset: const Offset(40, -120),
-                    icon: Icon(
-                      Icons.more_vert,
-                      color: Theme.of(context).appGrey600,
+                    icon: const GradientIcon(
+                      icon: Icons.more_vert,
+                      color: _kMoreColor,
                     ),
                     onSelected: (value) async {
                       switch (value) {
@@ -1703,20 +1793,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(8),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 22, color: iconColor),
-            const SizedBox(width: 4),
-            Text(
-              count,
-              style: TextStyle(
-                fontSize: scaledFontSize(14),
-                fontWeight: FontWeight.w600,
-                color: iconColor,
+        // One mask over icon and count together, rather than one each: the
+        // gradient then runs across the pair, so the number is the darker end
+        // of the same sweep instead of a second gradient restarting beside it.
+        child: GradientPaint(
+          color: iconColor,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 22, color: Colors.white),
+              const SizedBox(width: 4),
+              Text(
+                count,
+                style: TextStyle(
+                  fontSize: scaledFontSize(14),
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -1811,9 +1907,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
+  /// Bottom bar.
+  ///
+  /// Colour-coded rather than a row of grey glyphs: each destination owns a
+  /// colour and carries its name, so the bar is readable at a glance instead of
+  /// asking the reader to decode three similar icons. The upload button is the
+  /// one action rather than a destination, so it keeps its raised blue disc in
+  /// the middle.
   Widget _buildBottomNavigation(BuildContext context) {
+    const homeColor = Color(0xFFF5A623); // amber
+    const videoColor = Color(0xFF7C3AED); // purple
+    const notifyColor = Color(0xFFE0245E); // the badge's own pink/red
+    const uploadTop = Color(0xFF42A5F5);
+    const uploadBottom = Color(0xFF1565C0);
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: 3,
+      ),
       decoration: BoxDecoration(
         color: Theme.of(context).appCard,
         border: Border(top: BorderSide(color: Theme.of(context).appGrey300)),
@@ -1821,20 +1933,45 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          // Settings/Home
-          IconButton(
-            onPressed: () {
+          _buildNavItem(
+            context,
+            icon: Icons.home_rounded,
+            label: 'Home',
+            color: homeColor,
+            onTap: () {
               _videoPreloader.pauseAllVideos();
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const SettingsScreen()),
               );
             },
-            icon: Icon(Icons.home, color: Theme.of(context).appGrey600),
           ),
 
-          // Upload news icon — shown for all users
+          // Entertainment, lifted out of the More list into a button of its
+          // own. Absent when the backend sends no such topic, so the bar
+          // never shows a control that leads nowhere.
+          Consumer(
+            builder: (context, ref, _) {
+              final entertainment = ref
+                  .watch(homeViewModelProvider)
+                  .entertainmentTopic;
+              if (entertainment == null) return const SizedBox.shrink();
+              return _buildNavItem(
+                context,
+                icon: Icons.smart_display_rounded,
+                label: 'Videos',
+                color: videoColor,
+                onTap: () {
+                  _videoPreloader.pauseAllVideos();
+                  ref.read(homeViewModelProvider).selectTopic(entertainment);
+                },
+              );
+            },
+          ),
+
+          // Upload news — shown for all users.
           InkWell(
+            customBorder: const CircleBorder(),
             onTap: () async {
               _videoPreloader.pauseAllVideos();
               final isAuthenticated = await AuthHelper.requireAuth(
@@ -1853,18 +1990,65 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               }
             },
             child: Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(11),
               decoration: BoxDecoration(
-                color: Theme.of(context).primaryColor,
+                gradient: const LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [uploadTop, uploadBottom],
+                ),
                 shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: uploadBottom.withValues(alpha: 0.35),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
               ),
-              child: const Icon(Icons.add, color: Colors.white, size: 16),
+              child: const Icon(Icons.add, color: Colors.white, size: 22),
             ),
           ),
 
-          // Notifications
-          IconButton(
-            onPressed: () {
+          _buildNavItem(
+            context,
+            icon: Icons.notifications_rounded,
+            label: 'Notifications',
+            color: notifyColor,
+            // The badge rides on this icon, so it watches the count itself
+            // rather than making the whole bar rebuild for a number.
+            badge: Consumer(
+              builder: (context, ref, _) {
+                final unread = ref.watch(unreadNotificationsProvider);
+                if (unread <= 0) return const SizedBox.shrink();
+                return Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 1,
+                  ),
+                  constraints: const BoxConstraints(minWidth: 16),
+                  decoration: BoxDecoration(
+                    color: notifyColor,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: Theme.of(context).appCard,
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Text(
+                    unread > 99 ? '99+' : '$unread',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: scaledFontSize(9),
+                      fontWeight: FontWeight.w700,
+                      height: 1.2,
+                    ),
+                  ),
+                );
+              },
+            ),
+            onTap: () {
               _videoPreloader.pauseAllVideos();
               Navigator.push(
                 context,
@@ -1875,67 +2059,71 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 // some notifications while inside the inbox.
               ).then((_) => _loadUnreadCount());
             },
-            icon: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Icon(
-                  Icons.notifications_outlined,
-                  color: Theme.of(context).appGrey600,
-                ),
-                if (_unreadNotifications > 0)
-                  Positioned(
-                    top: -5,
-                    right: -5,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 4,
-                        vertical: 1,
-                      ),
-                      constraints: const BoxConstraints(minWidth: 16),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE0245E),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: Theme.of(context).appCard,
-                          width: 1.5,
-                        ),
-                      ),
-                      child: Text(
-                        _unreadNotifications > 99
-                            ? '99+'
-                            : '$_unreadNotifications',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: scaledFontSize(9),
-                          fontWeight: FontWeight.w700,
-                          height: 1.2,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
           ),
         ],
       ),
     );
   }
+
+  /// One labelled destination. Icon and label share the colour, which is what
+  /// makes the bar readable without the reader stopping to work out the glyphs.
+  Widget _buildNavItem(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+    Widget? badge,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                GradientIcon(icon: icon, color: color, size: 24),
+                // The badge stays outside the gradient deliberately — it is
+                // white on a solid chip, and a mask over it would repaint the
+                // number in the icon's colours and lose the contrast.
+                if (badge != null) Positioned(top: -5, right: -5, child: badge),
+              ],
+            ),
+            const SizedBox(height: 2),
+            GradientPaint(
+              color: color,
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: scaledFontSize(11),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
-/// The vertical, one-article-per-page feed for a single tab.
+/// A vertical pager for a single feed tab.
 ///
-/// Exists as its own widget for one reason: it **owns its `PageController`**.
-/// The controller used to live on `_HomeScreenState` and be shared by every
-/// tab, which caused two problems. A tab you scrolled deep into left its
-/// offset behind, so the next tab — often with far fewer articles — opened
-/// past its own end and looked blank or refused to scroll. And while the tab
-/// transition animated, the outgoing and incoming feeds were briefly attached
-/// to that same controller at once, which Flutter does not support.
+/// Built per tab rather than shared. One controller across every tab caused two
+/// problems: a tab you scrolled deep into left its offset behind, so the next
+/// tab — often with far fewer articles — opened past its own end and looked
+/// blank or refused to scroll; and while the tab transition animated, the
+/// outgoing and incoming feeds were briefly attached to that same controller at
+/// once, which Flutter does not support.
 ///
 /// Give this widget a `ValueKey(tabName)` and both problems disappear: a tab
-/// change builds a new state object with a new controller starting at page 0.
-class _TabFeedPager extends StatefulWidget {
+/// change builds a new state object with a new controller of its own.
+class _TabFeedPager extends ConsumerStatefulWidget {
   /// Pages in this tab. A count rather than the list itself, because a page is
   /// now either an article or a standalone advert and the pager doesn't care
   /// which — [itemBuilder] decides that.
@@ -1945,8 +2133,8 @@ class _TabFeedPager extends StatefulWidget {
   /// tab last time, instead of always starting at the top.
   final int initialPage;
 
-  /// Fired when the feed settles on [index] — on first build and on every
-  /// page change. Used for video preloading and view-dwell tracking.
+  /// Fired when the feed settles on [index] — on first build and on every page
+  /// change. Used for video preloading and view-dwell tracking.
   final void Function(int index) onPageSettled;
 
   /// Fired when the user is within a few pages of the end, to fetch more.
@@ -1959,8 +2147,13 @@ class _TabFeedPager extends StatefulWidget {
   final Widget Function(BuildContext context, int index, bool isActive)
   itemBuilder;
 
+  /// Which tab this pager belongs to — the key its page and refresh state are
+  /// held under. Same value as the widget's [ValueKey].
+  final String tabKey;
+
   const _TabFeedPager({
     super.key,
+    required this.tabKey,
     required this.itemCount,
     required this.onPageSettled,
     required this.onNearEnd,
@@ -1970,25 +2163,40 @@ class _TabFeedPager extends StatefulWidget {
   });
 
   @override
-  State<_TabFeedPager> createState() => _TabFeedPagerState();
+  ConsumerState<_TabFeedPager> createState() => _TabFeedPagerState();
 }
 
-class _TabFeedPagerState extends State<_TabFeedPager> {
+class _TabFeedPagerState extends ConsumerState<_TabFeedPager> {
   late final PageController _controller = PageController(
     initialPage: widget.initialPage,
   );
-  late int _currentPage = widget.initialPage;
+
+  /// Page state lives in [feedPageProvider]; these just name the read and the
+  /// write so the rest of the class reads as it did before.
+  int get _currentPage => ref.read(feedPageProvider(widget.tabKey));
+  set _currentPage(int value) =>
+      ref.read(feedPageProvider(widget.tabKey).notifier).state = value;
+
+  bool get _isRefreshing => ref.read(feedRefreshingProvider(widget.tabKey));
+  set _isRefreshing(bool value) =>
+      ref.read(feedRefreshingProvider(widget.tabKey).notifier).state = value;
 
   @override
   void initState() {
     super.initState();
-    // Report the opening article once the frame is up. Doing it here rather
-    // than from itemBuilder means it fires exactly once per tab, with no "have
-    // I already tracked this page?" flag to keep in sync.
+    // Both of these run inside the build phase, and Riverpod refuses to have a
+    // provider written while the tree is building — so the seed goes in the
+    // post-frame callback alongside the page report. One frame where the
+    // opening card isn't yet flagged active costs nothing: `isActive` only
+    // gates video autoplay, which the settle callback drives anyway.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && widget.itemCount > 0) {
-        widget.onPageSettled(widget.initialPage);
-      }
+      if (!mounted) return;
+      _currentPage = widget.initialPage;
+      _isRefreshing = false;
+      // Report the opening article once the frame is up. Doing it here rather
+      // than from itemBuilder means it fires exactly once per tab, with no
+      // "have I already tracked this page?" flag to keep in sync.
+      if (widget.itemCount > 0) widget.onPageSettled(widget.initialPage);
     });
   }
 
@@ -2000,9 +2208,12 @@ class _TabFeedPagerState extends State<_TabFeedPager> {
     // leaving the controller parked past the last page.
     final lastPage = widget.itemCount - 1;
     if (_currentPage > lastPage && lastPage >= 0) {
-      _currentPage = lastPage;
+      // Deferred for the same reason as the seed above: didUpdateWidget is
+      // part of the build phase.
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _controller.hasClients) _controller.jumpToPage(lastPage);
+        if (!mounted) return;
+        _currentPage = lastPage;
+        if (_controller.hasClients) _controller.jumpToPage(lastPage);
       });
     }
   }
@@ -2017,7 +2228,6 @@ class _TabFeedPagerState extends State<_TabFeedPager> {
   /// current gesture. Reset when the drag ends, so it takes one deliberate pull
   /// rather than several small tugs adding up over time.
   double _pullDown = 0;
-  bool _isRefreshing = false;
 
   /// Pull distance that commits to a reload. Roughly the same travel a stock
   /// RefreshIndicator asks for.
@@ -2025,11 +2235,11 @@ class _TabFeedPagerState extends State<_TabFeedPager> {
 
   Future<void> _refresh() async {
     if (_isRefreshing) return;
-    setState(() => _isRefreshing = true);
+    _isRefreshing = true;
     try {
       await widget.onRefresh();
     } finally {
-      if (mounted) setState(() => _isRefreshing = false);
+      if (mounted) _isRefreshing = false;
     }
   }
 
@@ -2075,27 +2285,35 @@ class _TabFeedPagerState extends State<_TabFeedPager> {
       child: Stack(
         children: [
           _buildPager(),
-          if (_isRefreshing)
-            Positioned(
-              top: 12,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).appCard,
-                    shape: BoxShape.circle,
-                    boxShadow: Theme.of(context).shadowMd,
-                  ),
-                  child: const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2.4),
+          // Consumer around the spinner alone, so starting or ending a reload
+          // never rebuilds the pager underneath it.
+          Consumer(
+            builder: (context, ref, _) {
+              if (!ref.watch(feedRefreshingProvider(widget.tabKey))) {
+                return const SizedBox.shrink();
+              }
+              return Positioned(
+                top: 12,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).appCard,
+                      shape: BoxShape.circle,
+                      boxShadow: Theme.of(context).shadowMd,
+                    ),
+                    child: const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2.4),
+                    ),
                   ),
                 ),
-              ),
-            ),
+              );
+            },
+          ),
         ],
       ),
     );
@@ -2115,12 +2333,23 @@ class _TabFeedPagerState extends State<_TabFeedPager> {
       pageSnapping: false,
       physics: const _OneSwipePageScrollPhysics(),
       onPageChanged: (index) {
-        setState(() => _currentPage = index);
+        // No setState: writing the provider leaves the pager alone and wakes
+        // only the two cards whose active-ness changed.
+        _currentPage = index;
         if (index >= widget.itemCount - 3) widget.onNearEnd();
         widget.onPageSettled(index);
       },
-      itemBuilder: (context, index) =>
-          widget.itemBuilder(context, index, index == _currentPage),
+      itemBuilder: (context, index) => Consumer(
+        builder: (context, ref, _) {
+          // `select` is what keeps this cheap. Watching the index itself would
+          // rebuild every live card on each swipe; watching the comparison
+          // rebuilds only the cards whose boolean actually flipped.
+          final isActive = ref.watch(
+            feedPageProvider(widget.tabKey).select((page) => page == index),
+          );
+          return widget.itemBuilder(context, index, isActive);
+        },
+      ),
     );
   }
 }

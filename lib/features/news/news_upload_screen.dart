@@ -15,13 +15,19 @@ import 'package:flutter_colorpicker/flutter_colorpicker.dart' hide colorFromHex;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants/app_colors.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../../core/utils/youtube_url.dart';
+import '../../shared/widgets/youtube_link_dialog.dart';
 import '../../core/services/media_picker_services.dart';
 import '../../core/services/onboarding_storage.dart';
 import '../../core/services/video_preloader_service.dart';
 import '../../core/utils/color_utils.dart';
 import '../../data/models/news.dart';
+import '../../data/models/news_ad.dart';
 import '../../data/models/user.dart';
 import '../../data/repositories/notification_repository.dart';
+import '../../enums/user_role.dart';
 import '../../extensions/user_extensions.dart';
 import '../../shared/widgets/cached_image_widget.dart';
 import 'news_upload_view_model.dart';
@@ -51,6 +57,10 @@ class UploadPermissions {
   final bool canSelectDistricts;
   final bool canSelectMandals;
 
+  /// Whether the ad slots offer a YouTube link beside the file picker.
+  /// Admin, Sub Admin and News Desk; Sr Reporters upload files only.
+  final bool canPostYoutubeAds;
+
   /// Locks the Topics card to "Your Area" and auto-assigns it. No role sets
   /// this today — dist-reporters used to, until they were given full topic
   /// access. Kept so the restriction can be re-applied to a role in one line.
@@ -62,6 +72,7 @@ class UploadPermissions {
     required this.canSelectStates,
     required this.canSelectDistricts,
     required this.canSelectMandals,
+    required this.canPostYoutubeAds,
     required this.limitTopicToYourArea,
   });
 
@@ -74,6 +85,7 @@ class UploadPermissions {
           canSelectStates: true,
           canSelectDistricts: true,
           canSelectMandals: true,
+          canPostYoutubeAds: true,
           limitTopicToYourArea: false,
         );
       // Dist-reporters publish with the same reach as sub-admins: any
@@ -88,6 +100,7 @@ class UploadPermissions {
           canSelectStates: false,
           canSelectDistricts: true,
           canSelectMandals: true,
+          canPostYoutubeAds: true,
           limitTopicToYourArea: false,
         );
       // reader & reporter: no topics/locations UI, auto-assigned
@@ -98,6 +111,8 @@ class UploadPermissions {
           canSelectStates: false,
           canSelectDistricts: false,
           canSelectMandals: false,
+          // Sr Reporters and readers upload files only.
+          canPostYoutubeAds: false,
           limitTopicToYourArea: false,
         );
     }
@@ -277,13 +292,26 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen>
     _fullTextColor = news.fullTextColor;
 
     final allTopics = ref.read(topicViewModelProvider).topics;
+
+    // Topics arrive in one of two shapes. Articles that went through the
+    // multi-topic form carry them in `locations` as entries of type "topic";
+    // older ones — and the rows the management list hands over — carry only
+    // the scalar `topic_id`. Reading just the first meant an edit could open
+    // with nothing selected, and since a topic is required to publish, the
+    // button then never enabled and said nothing about why.
+    final topicIdsFromLocations = news.topicLocations.map((l) => l.id).toList();
+    final topicIds = topicIdsFromLocations.isNotEmpty
+        ? topicIdsFromLocations
+        : (news.topicId != 0 ? <int>[news.topicId] : const <int>[]);
+
     await vm.prefillFromNews(
       allTopics: allTopics,
-      topicIds: news.topicLocations.map((l) => l.id).toList(),
+      topicIds: topicIds,
       stateIds: news.stateLocations.map((l) => l.id).toList(),
       districtIds: news.districtLocations.map((l) => l.id).toList(),
       mandalIds: news.mandalLocations.map((l) => l.id).toList(),
       existingMedia: news.media,
+      existingAds: news.ads,
     );
 
     if (_moreController.text.isNotEmpty) {
@@ -323,16 +351,27 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen>
     final topicViewModel = ref.watch(topicViewModelProvider);
     final theme = Theme.of(context);
 
-    // Topics: required only if showTopics is true AND not auto-assigned (limitTopicToYourArea)
-    // Locations: required only if showLocations is true
-    final isFormValid =
-        _headlineController.text.isNotEmpty &&
-        _descriptionController.text.isNotEmpty &&
-        (_permissions.showTopics && !_permissions.limitTopicToYourArea
-            ? vm.selectedCategories.isNotEmpty
-            : true) &&
-        (_permissions.showLocations ? vm.selectedStateIds.isNotEmpty : true) &&
-        vm.acceptTerms;
+    // What the story still needs before it can be published, in the order the
+    // fields appear on screen. Collected as a list rather than folded straight
+    // into a bool so the button can say what is missing — a greyed-out
+    // "Publish Story" with no reason is the same dead end whether the gap is a
+    // topic or the terms checkbox, and on an edit the missing field is usually
+    // scrolled well out of view.
+    //
+    // Topics: required only if showTopics is true AND not auto-assigned
+    // (limitTopicToYourArea). Locations: required only if showLocations is true.
+    final missingRequirements = <String>[
+      if (_headlineController.text.isEmpty) 'a headline',
+      if (_descriptionController.text.isEmpty) 'a description',
+      if (_permissions.showTopics &&
+          !_permissions.limitTopicToYourArea &&
+          vm.selectedCategories.isEmpty)
+        'at least one topic',
+      if (_permissions.showLocations && vm.selectedStateIds.isEmpty)
+        'at least one state',
+      if (!vm.acceptTerms) 'the terms accepted',
+    ];
+    final isFormValid = missingRequirements.isEmpty;
 
     return PopScope(
       // Block back navigation (gesture, button, hardware back) while an upload
@@ -397,6 +436,8 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen>
                           if (_publishesDirectly) ...[
                             const SizedBox(height: 12),
                             _buildNotificationChoice(theme),
+                          ],
+                          if (_canUploadAds) ...[
                             const SizedBox(height: 16),
                             _buildAdsCard(vm, theme),
                           ],
@@ -407,7 +448,7 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen>
                       ),
                     ),
                   ),
-                  _buildSendButton(vm, isFormValid, theme),
+                  _buildSendButton(vm, isFormValid, missingRequirements, theme),
                 ],
               ),
             ),
@@ -480,8 +521,10 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen>
           ),
           const SizedBox(height: 6),
           Text(
-            'Up to two sponsor creatives. They appear inside the article, '
-            'clearly marked "Ad" — never as part of the news media.',
+            _uploadableAdSlots.length > 1
+                ? 'Up to two sponsor creatives. Ad 1 runs after the '
+                      'description, Ad 2 at the end of the article.'
+                : 'One sponsor creative, running at the end of the article.',
             style: TextStyle(
               fontSize: scaledFontSize(12),
               color: theme.appTextSecondary,
@@ -489,12 +532,298 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen>
             ),
           ),
           const SizedBox(height: 14),
-          _buildAdSlot(vm, theme, slot: 1),
-          const SizedBox(height: 10),
-          _buildAdSlot(vm, theme, slot: 2),
+          // One row per ad place this author may fill. A slot the story already
+          // fills shows that creative with its Remove / Replace controls; an
+          // empty one shows the picker. Walking the slots rather than the list
+          // keeps the form honest about *which* place each creative sits in —
+          // the slot is what the update posts against and what decides where
+          // the advert runs, so an ad in slot 2 must never be edited through
+          // slot 1's controls.
+          for (final slot in _uploadableAdSlots) ...[
+            if (slot != _uploadableAdSlots.first) const SizedBox(height: 10),
+            if (vm.existingAdInSlot(slot) case final ad?)
+              _buildAttachedAdRow(vm, theme, ad, slot)
+            else
+              _buildAdSlot(vm, theme, slot: slot),
+          ],
         ],
       ),
     );
+  }
+
+  /// One advert that is already saved against this article.
+  ///
+  /// Three states: as-is, queued for removal, or queued for a new creative.
+  /// Nothing is sent to the server until the form is submitted — a tap here is
+  /// an intention, not a deletion, so an editor who mis-taps can undo it, and a
+  /// creative is never pulled off a story whose own save then fails.
+  Widget _buildAttachedAdRow(
+    NewsUploadViewModel vm,
+    ThemeData theme,
+    NewsAd ad,
+    int slot,
+  ) {
+    final notifier = ref.read(newsUploadViewModelProvider.notifier);
+    final isRemoved = vm.isAdSlotRemoved(slot);
+    final replacement = vm.replacementForSlot(slot);
+    final isEditable = _canEditAttachedAds;
+
+    final Color border = isRemoved
+        ? Colors.red.withValues(alpha: 0.45)
+        : replacement != null
+        ? _kSuccess.withValues(alpha: 0.5)
+        : theme.appDivider;
+
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: border),
+        color: isRemoved
+            ? Colors.red.withValues(alpha: 0.04)
+            : theme.appGrey100,
+      ),
+      child: Row(
+        children: [
+          Opacity(
+            opacity: isRemoved ? 0.45 : 1,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: SizedBox(
+                width: 54,
+                height: 54,
+                child: _buildAttachedAdThumb(theme, ad, replacement),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '${ad.isVideo ? 'Video' : 'Image'} ad $slot',
+                  style: TextStyle(
+                    fontSize: scaledFontSize(13),
+                    fontWeight: FontWeight.w700,
+                    color: isRemoved
+                        ? theme.appTextLight
+                        : theme.appTextPrimary,
+                    decoration: isRemoved ? TextDecoration.lineThrough : null,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  isRemoved
+                      ? 'Will be removed when you save'
+                      : replacement != null
+                      ? 'New creative — replaces this one on save'
+                      : _canEditAttachedAds
+                      ? 'Attached to this article'
+                      : 'Attached — only Admin, Sub Admin or News Desk can '
+                            'change it',
+                  style: TextStyle(
+                    fontSize: scaledFontSize(11),
+                    color: isRemoved
+                        ? Colors.red.shade400
+                        : replacement != null
+                        ? _kSuccess
+                        : theme.appTextLight,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (isRemoved)
+            TextButton(
+              onPressed: () => notifier.undoRemoveAdSlot(slot),
+              child: const Text('Undo'),
+            )
+          else if (isEditable) ...[
+            IconButton(
+              tooltip: replacement != null ? 'Pick another' : 'Replace',
+              onPressed: () => _replaceAdInSlot(slot),
+              icon: Icon(
+                Icons.swap_horiz_rounded,
+                size: 20,
+                color: theme.appPrimary,
+              ),
+            ),
+            IconButton(
+              tooltip: 'Remove',
+              onPressed: () => notifier.removeAdSlot(slot),
+              icon: const Icon(
+                Icons.close_rounded,
+                size: 20,
+                color: Colors.red,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAttachedAdThumb(ThemeData theme, NewsAd ad, File? replacement) {
+    // A queued replacement is what will actually be on the article, so that's
+    // the frame to show.
+    if (replacement != null) {
+      return _isVideoPath(replacement.path)
+          ? Container(
+              color: Colors.black12,
+              child: Icon(Icons.videocam_rounded, color: theme.appPrimary),
+            )
+          : Image.file(replacement, fit: BoxFit.cover);
+    }
+
+    if (ad.isVideo) {
+      return Container(
+        color: Colors.black12,
+        child: Icon(Icons.videocam_rounded, color: theme.appPrimary),
+      );
+    }
+
+    return CachedImageWidget(
+      imageUrl: ad.url,
+      fit: BoxFit.cover,
+      errorWidget: Container(
+        color: theme.appGrey200,
+        child: Icon(Icons.campaign_outlined, color: theme.appTextLight),
+      ),
+    );
+  }
+
+  /// The link card shown once a slot holds a YouTube ad: its poster frame,
+  /// the id as confirmation of what was read out of the URL, and the two
+  /// actions — change the link, or clear the slot.
+  Widget _buildYoutubeAdCard(
+    ThemeData theme,
+    int slot,
+    String url,
+    NewsUploadViewModel notifier,
+  ) {
+    final thumb = YoutubeUrl.thumbnail(url);
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: theme.appPrimary.withValues(alpha: 0.4)),
+        color: theme.appPrimary.withValues(alpha: 0.05),
+      ),
+      child: Row(
+        children: [
+          // Tapping opens the video in YouTube, so the attached creative can
+          // be checked before the story is published rather than after.
+          GestureDetector(
+            onTap: () => _openYoutube(url),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: SizedBox(
+                width: 72,
+                height: 54,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (thumb != null)
+                      Image.network(
+                        thumb,
+                        fit: BoxFit.cover,
+                        // A deleted or private video still has a valid-looking
+                        // URL but no poster frame, so fall back rather than
+                        // showing a broken image box.
+                        errorBuilder: (_, __, ___) =>
+                            Container(color: Colors.black12),
+                      )
+                    else
+                      Container(color: Colors.black12),
+                    const Center(
+                      child: Icon(
+                        Icons.play_circle_fill_rounded,
+                        color: Colors.white,
+                        size: 26,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Ad $slot',
+                  style: TextStyle(
+                    fontSize: scaledFontSize(13),
+                    fontWeight: FontWeight.w700,
+                    color: theme.appTextPrimary,
+                  ),
+                ),
+                GestureDetector(
+                  onTap: () => _openYoutube(url),
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          'YouTube · ${YoutubeUrl.videoId(url) ?? ''}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: scaledFontSize(12),
+                            color: theme.appPrimary,
+                            decoration: TextDecoration.underline,
+                            decorationColor: theme.appPrimary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.open_in_new_rounded,
+                        size: 12,
+                        color: theme.appPrimary,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Change link',
+            onPressed: () => _pasteYoutubeAd(slot, notifier, initial: url),
+            icon: Icon(Icons.edit_outlined, size: 20, color: theme.appPrimary),
+          ),
+          IconButton(
+            tooltip: 'Remove',
+            onPressed: () => notifier.setAdYoutubeUrl(slot, null),
+            icon: const Icon(Icons.close_rounded, size: 20, color: Colors.red),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Opens an attached YouTube ad in the YouTube app, so the editor can check
+  /// the creative without publishing first.
+  Future<void> _openYoutube(String url) async {
+    final watch = YoutubeUrl.watchUrl(url);
+    if (watch == null) return;
+    final uri = Uri.tryParse(watch);
+    if (uri == null) return;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  Future<void> _pasteYoutubeAd(
+    int slot,
+    NewsUploadViewModel notifier, {
+    String? initial,
+  }) async {
+    final result = await YoutubeLinkDialog.show(context, initial: initial);
+    if (result != null) notifier.setAdYoutubeUrl(slot, result);
   }
 
   Widget _buildAdSlot(
@@ -504,37 +833,80 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen>
   }) {
     final file = slot == 1 ? vm.ad1 : vm.ad2;
     final notifier = ref.read(newsUploadViewModelProvider.notifier);
+    final youtubeUrl = vm.adYoutubeUrl(slot);
+
+    // A slot holds one creative, so a link and a file are never shown at once.
+    if (youtubeUrl != null) {
+      return _buildYoutubeAdCard(theme, slot, youtubeUrl, notifier);
+    }
 
     if (file == null) {
-      return InkWell(
-        onTap: () => _pickAd(slot),
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-          decoration: BoxDecoration(
+      return Column(
+        children: [
+          InkWell(
+            onTap: () => _pickAd(slot),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: theme.appDivider),
-            color: theme.appGrey100,
-          ),
-          child: Row(
-            children: [
-              Icon(
-                Icons.add_photo_alternate_outlined,
-                size: 20,
-                color: theme.appTextLight,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: theme.appDivider),
+                color: theme.appGrey100,
               ),
-              const SizedBox(width: 10),
-              Text(
-                'Add ad $slot  ·  image or video',
-                style: TextStyle(
-                  fontSize: scaledFontSize(13),
-                  color: theme.appTextSecondary,
-                  fontWeight: FontWeight.w500,
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.add_photo_alternate_outlined,
+                    size: 20,
+                    color: theme.appTextLight,
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Add ad $slot  ·  image or video',
+                    style: TextStyle(
+                      fontSize: scaledFontSize(13),
+                      color: theme.appTextSecondary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // Sr Reporters and below upload files only, so the link option is
+          // simply absent for them rather than shown and refused.
+          if (_permissions.canPostYoutubeAds) ...[
+            const SizedBox(height: 6),
+            InkWell(
+              onTap: () => _pasteYoutubeAd(slot, notifier),
+              borderRadius: BorderRadius.circular(10),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.play_circle_outline_rounded,
+                      size: 18,
+                      color: theme.appPrimary,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'or paste a YouTube link',
+                      style: TextStyle(
+                        fontSize: scaledFontSize(13),
+                        color: theme.appPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
-        ),
+            ),
+          ],
+        ],
       );
     }
 
@@ -618,6 +990,26 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen>
 
   /// Asks whether this slot is an image or a video, then picks one.
   Future<void> _pickAd(int slot) async {
+    final file = await _pickAdFile();
+    if (file != null && mounted) {
+      ref.read(newsUploadViewModelProvider.notifier).setAd(slot, file);
+    }
+  }
+
+  /// Queues a new creative for an ad place that already holds one. Goes up as
+  /// `ad_1` / `ad_2` with the story update, which overwrites that place.
+  Future<void> _replaceAdInSlot(int slot) async {
+    final file = await _pickAdFile();
+    if (file != null && mounted) {
+      ref
+          .read(newsUploadViewModelProvider.notifier)
+          .replaceAdInSlot(slot, file);
+    }
+  }
+
+  /// The shared image-or-video sheet behind both picking a new ad and replacing
+  /// an existing one. Returns null when the user backs out.
+  Future<File?> _pickAdFile() async {
     final choice = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.white,
@@ -642,19 +1034,16 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen>
         ),
       ),
     );
-    if (choice == null || !mounted) return;
+    if (choice == null || !mounted) return null;
 
-    final notifier = ref.read(newsUploadViewModelProvider.notifier);
     if (choice == 'video') {
-      final video = await _mediaPickerService.pickVideo();
-      if (video != null) notifier.setAd(slot, video);
-      return;
+      return _mediaPickerService.pickVideo();
     }
 
-    // pickImages is multi-select; an ad slot holds exactly one, so take the
-    // first and ignore the rest rather than silently dropping the slot.
+    // pickImages is multi-select; an ad holds exactly one, so take the first
+    // and ignore the rest rather than silently dropping the pick.
     final images = await _mediaPickerService.pickImages();
-    if (images.isNotEmpty) notifier.setAd(slot, images.first);
+    return images.isNotEmpty ? images.first : null;
   }
 
   Widget _buildCard({required Widget child}) {
@@ -1722,6 +2111,43 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen>
     return role == 'admin' || role == 'sub_admin' || role == 'dist-reporter';
   }
 
+  /// True for the roles allowed to attach sponsor creatives.
+  ///
+  /// Deliberately separate from [_publishesDirectly]: a Sr Reporter sells ad
+  /// space on their own stories, but the story itself still lands in `pending`
+  /// for an editor. So they get the ad slots without the notification choice —
+  /// the two permissions are not the same question.
+  bool get _canUploadAds {
+    final role = ref.read(authViewModelProvider).user?.primaryRole.value;
+    return role == 'admin' ||
+        role == 'sub_admin' ||
+        role == 'dist-reporter' ||
+        role == 'reporter';
+  }
+
+  /// The ad places this author may fill, in the order they run in the article.
+  ///
+  /// A Sr Reporter gets Ad 2 only — the slot that runs at the end of the piece.
+  /// Ad 1 breaks the article right after the description, which is the more
+  /// valuable placement and the desk's to sell; a reporter selling space on
+  /// their own story gets the closing one.
+  List<int> get _uploadableAdSlots {
+    final role = ref.read(authViewModelProvider).user?.primaryRole.value;
+    return role == UserRole.reporter.value ? const [2] : const [1, 2];
+  }
+
+  /// True for the desk roles that may edit an advert already on a story —
+  /// Admin, Sub Admin and News Desk (`dist-reporter`).
+  ///
+  /// Narrower than [_canUploadAds] on purpose. A Sr Reporter can sell space on
+  /// their own story, but pulling a creative off one is an editorial call: the
+  /// article may already have been approved with that advert on it, and the
+  /// booking is the desk's to cancel, not the author's.
+  bool get _canEditAttachedAds {
+    final role = ref.read(authViewModelProvider).user?.primaryRole.value;
+    return role == 'admin' || role == 'sub_admin' || role == 'dist-reporter';
+  }
+
   Widget _buildNotificationChoice(ThemeData theme) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 5),
@@ -2001,51 +2427,78 @@ class _NewsUploadScreenState extends ConsumerState<NewsUploadScreen>
   Widget _buildSendButton(
     NewsUploadViewModel vm,
     bool isFormValid,
+    List<String> missingRequirements,
     ThemeData theme,
   ) {
     return SafeArea(
       top: false,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-        child: SizedBox(
-          width: double.infinity,
-          height: 50,
-          child: ElevatedButton.icon(
-            onPressed: isFormValid && !vm.isUploading ? _handleSendNews : null,
-            icon: vm.isUploading
-                ? const SizedBox.shrink()
-                : const Icon(Icons.send_rounded, size: 18),
-            label: vm.isUploading
-                ? const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  )
-                : Text(
-                    'Publish Story',
-                    style: TextStyle(
-                      fontSize: scaledFontSize(15),
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _kAccent,
-              disabledBackgroundColor: theme.appGrey300,
-              foregroundColor: Colors.white,
-              disabledForegroundColor: Colors.white60,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (!isFormValid && !vm.isUploading) ...[
+              Text(
+                'Still needs ${_readableList(missingRequirements)}.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: scaledFontSize(12),
+                  color: theme.appTextSecondary,
+                ),
               ),
-              elevation: 0,
+              const SizedBox(height: 8),
+            ],
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton.icon(
+                onPressed: isFormValid && !vm.isUploading
+                    ? _handleSendNews
+                    : null,
+                icon: vm.isUploading
+                    ? const SizedBox.shrink()
+                    : const Icon(Icons.send_rounded, size: 18),
+                label: vm.isUploading
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white,
+                          ),
+                        ),
+                      )
+                    : Text(
+                        'Publish Story',
+                        style: TextStyle(
+                          fontSize: scaledFontSize(15),
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _kAccent,
+                  disabledBackgroundColor: theme.appGrey300,
+                  foregroundColor: Colors.white,
+                  disabledForegroundColor: Colors.white60,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  elevation: 0,
+                ),
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );
+  }
+
+  /// "a headline and a description" / "a headline, a topic and the terms".
+  static String _readableList(List<String> items) {
+    if (items.length == 1) return items.first;
+    return '${items.sublist(0, items.length - 1).join(', ')} and ${items.last}';
   }
 
   // ── Shared chip widgets ─────────────────────────────────────────────────────

@@ -1,4 +1,1 @@
-enum OnboardingStep {
-  location,
-  completed,
-}
+enum OnboardingStep { location, completed }

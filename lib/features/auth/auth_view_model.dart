@@ -515,12 +515,19 @@ class AuthViewModel extends ChangeNotifier {
     await _authStorage.saveToken(response.accessToken);
     ApiService.instance.setAuthToken(response.accessToken);
 
-    // Sync the API user's location (stateId/districtId/mandalId) into
-    // OnboardingStorage immediately. Without this, the home screen (which
-    // reads location from OnboardingStorage) keeps showing the *previous*
-    // location until the app is restarted — visible after an admin changes
-    // a user's role/area and the user logs back in.
+    // Settle the location right away, so the home screen (which reads it from
+    // OnboardingStorage) shows the right area without an app restart.
     if (_user != null) {
+      // The location on the device is the one the reader just picked (or
+      // confirmed) on the sign-in screen, so it is theirs and wins over the
+      // account's registered location. Without this the merge below replaced
+      // it with the account's area — or, when that was incomplete, with the
+      // first district and mandal of the state — and the reader landed
+      // somewhere they never chose. The account location is still used when
+      // the device has none.
+      if (await _onboardingStorage.getSelectedState() != null) {
+        await _onboardingStorage.setLocationManuallySetBy(_user!.id);
+      }
       await _mergeOnboardingLocationData();
 
       // Bind this device's FCM token to the now-logged-in user so push

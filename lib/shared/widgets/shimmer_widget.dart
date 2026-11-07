@@ -43,7 +43,11 @@ class TopicChipShimmer extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          ShimmerBox(width: 16, height: 16, borderRadius: BorderRadius.circular(8)),
+          ShimmerBox(
+            width: 16,
+            height: 16,
+            borderRadius: BorderRadius.circular(8),
+          ),
           const SizedBox(width: 6),
           ShimmerBox(
             width: isFullWidth ? double.infinity : _randomWidth(),

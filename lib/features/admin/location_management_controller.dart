@@ -283,7 +283,10 @@ class LocationManagementController extends ChangeNotifier {
         isActive: false,
         createdAt: district.createdAt,
       );
-      final result = await _districtRepository.updateDistrict(district.id, deactivated);
+      final result = await _districtRepository.updateDistrict(
+        district.id,
+        deactivated,
+      );
       if (result != null) {
         _districts.removeWhere((d) => d.id == district.id);
         notifyListeners();
@@ -306,7 +309,10 @@ class LocationManagementController extends ChangeNotifier {
         isActive: false,
         createdAt: mandal.createdAt,
       );
-      final result = await _mandalRepository.updateMandal(mandal.id, deactivated);
+      final result = await _mandalRepository.updateMandal(
+        mandal.id,
+        deactivated,
+      );
       if (result != null) {
         _mandals.removeWhere((m) => m.id == mandal.id);
         notifyListeners();
@@ -324,10 +330,7 @@ class LocationManagementController extends ChangeNotifier {
   // moves. Renaming keeps the id, so news already tagged to this location
   // stays linked — nothing to re-point.
 
-  Future<bool> renameState(
-    location_models.State state,
-    String newName,
-  ) async {
+  Future<bool> renameState(location_models.State state, String newName) async {
     return _runRename(() async {
       final result = await _stateRepository.updateState(
         state.id,

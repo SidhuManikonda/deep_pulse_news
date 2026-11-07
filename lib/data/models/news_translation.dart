@@ -41,12 +41,15 @@ class NewsTranslation {
     return NewsTranslation(
       id: json['id'] ?? 0,
       newsId: json['news_id'] ?? 0,
-      languageId: json['lanuguage_id'] ?? 0, // Note: API has typo "lanuguage_id"
+      languageId:
+          json['lanuguage_id'] ?? 0, // Note: API has typo "lanuguage_id"
       title: json['title'] ?? '',
       slug: json['slug'] ?? '',
       shortDescription: json['short_description'] ?? '',
       content: json['content'] ?? '',
-      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '') ?? DateTime.now(),
+      createdAt:
+          DateTime.tryParse(json['created_at']?.toString() ?? '') ??
+          DateTime.now(),
       titleColor: _cleanHex(json['title_color']),
       descriptionColor: _cleanHex(json['content_color']),
       fullTextColor: _cleanHex(json['full_text_color']),

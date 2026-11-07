@@ -24,18 +24,11 @@ class CustomErrorWidget extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              icon ?? Icons.error_outline,
-              size: 64,
-              color: appErrorColor,
-            ),
+            Icon(icon ?? Icons.error_outline, size: 64, color: appErrorColor),
             const SizedBox(height: 16),
             Text(
               message,
-              style: TextStyle(
-                fontSize: 16,
-                color: theme.appTextSecondary,
-              ),
+              style: TextStyle(fontSize: 16, color: theme.appTextSecondary),
               textAlign: TextAlign.center,
             ),
             if (onRetry != null) ...[
@@ -99,10 +92,7 @@ class EmptyStateWidget extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               message,
-              style: TextStyle(
-                fontSize: 14,
-                color: theme.appTextSecondary,
-              ),
+              style: TextStyle(fontSize: 14, color: theme.appTextSecondary),
               textAlign: TextAlign.center,
             ),
             if (onAction != null) ...[

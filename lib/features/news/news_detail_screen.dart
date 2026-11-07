@@ -27,7 +27,8 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
   late News _newsItem;
   late final NewsRepository _newsRepository;
   final _videoPreloader = VideoPreloaderService();
-  final Map<int, int> _currentCarouselPages = {}; // Track carousel page per news item
+  final Map<int, int> _currentCarouselPages =
+      {}; // Track carousel page per news item
 
   @override
   void initState() {
@@ -251,7 +252,7 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
                     ),
                     child: Text(
                       _formatTimestamp(_newsItem.displayTime),
-                      style:  TextStyle(
+                      style: TextStyle(
                         fontSize: scaledFontSize(12),
                         color: Colors.white,
                         fontWeight: FontWeight.w500,
@@ -264,7 +265,10 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
                   bottom: 8,
                   right: 8,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.black.withOpacity(0.4),
                       borderRadius: BorderRadius.circular(8),
@@ -288,7 +292,7 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
                         const SizedBox(width: 4),
                         Text(
                           'Deep Pulse',
-                          style:  TextStyle(
+                          style: TextStyle(
                             fontSize: scaledFontSize(10),
                             color: Colors.white,
                             fontWeight: FontWeight.w600,
@@ -368,7 +372,7 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
                   ),
                   child: Text(
                     '${currentCarouselPage + 1}/$mediaCount',
-                    style:  TextStyle(
+                    style: TextStyle(
                       fontSize: scaledFontSize(12),
                       color: Colors.white,
                       fontWeight: FontWeight.w500,
@@ -391,7 +395,7 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
                   ),
                   child: Text(
                     _formatTimestamp(_newsItem.displayTime),
-                    style:  TextStyle(
+                    style: TextStyle(
                       fontSize: scaledFontSize(12),
                       color: Colors.white,
                       fontWeight: FontWeight.w500,
@@ -404,7 +408,10 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
                 bottom: 8,
                 right: 8,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.black.withOpacity(0.4),
                     borderRadius: BorderRadius.circular(8),
@@ -428,7 +435,7 @@ class _NewsDetailScreenState extends ConsumerState<NewsDetailScreen> {
                       const SizedBox(width: 4),
                       Text(
                         'Deep Pulse',
-                        style:  TextStyle(
+                        style: TextStyle(
                           fontSize: scaledFontSize(10),
                           color: Colors.white,
                           fontWeight: FontWeight.w600,

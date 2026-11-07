@@ -3,11 +3,7 @@ class NewsLocation {
   final String value;
   final String type; // "topic", "state", "district", "mandal"
 
-  NewsLocation({
-    required this.id,
-    required this.value,
-    required this.type,
-  });
+  NewsLocation({required this.id, required this.value, required this.type});
 
   factory NewsLocation.fromJson(Map<String, dynamic> json) {
     return NewsLocation(
@@ -18,11 +14,7 @@ class NewsLocation {
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'value': value,
-      'type': type,
-    };
+    return {'id': id, 'value': value, 'type': type};
   }
 
   bool get isTopic => type == 'topic';

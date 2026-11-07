@@ -174,7 +174,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     ),
                     style: OutlinedButton.styleFrom(
                       side: BorderSide(
-                        color: Theme.of(context).appPrimary.withValues(alpha: 0.4),
+                        color: Theme.of(
+                          context,
+                        ).appPrimary.withValues(alpha: 0.4),
                       ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),

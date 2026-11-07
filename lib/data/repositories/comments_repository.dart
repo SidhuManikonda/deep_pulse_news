@@ -121,9 +121,11 @@ class CommentsRepositoryImpl implements CommentsRepository {
         }
 
         // Handle double-nested paginated response: { data: { data: [...] } }
-        if (response.containsKey('data') && response['data'] is Map<String, dynamic>) {
+        if (response.containsKey('data') &&
+            response['data'] is Map<String, dynamic>) {
           final paginatedData = response['data'] as Map<String, dynamic>;
-          if (paginatedData.containsKey('data') && paginatedData['data'] is List) {
+          if (paginatedData.containsKey('data') &&
+              paginatedData['data'] is List) {
             final comments = paginatedData['data'] as List<dynamic>;
             return comments.map((json) => Comment.fromJson(json)).toList();
           }

@@ -4,7 +4,7 @@ import 'package:geocoding/geocoding.dart';
 class LocationService {
   static LocationService? _instance;
   LocationService._internal();
-  
+
   static LocationService get instance {
     _instance ??= LocationService._internal();
     return _instance!;
@@ -31,7 +31,9 @@ class LocationService {
       // Check if location services are enabled
       bool serviceEnabled = await isLocationServiceEnabled();
       if (!serviceEnabled) {
-        return LocationResult.error('Location services are disabled. Please enable location services in your device settings.');
+        return LocationResult.error(
+          'Location services are disabled. Please enable location services in your device settings.',
+        );
       }
 
       // Check permissions
@@ -39,12 +41,16 @@ class LocationService {
       if (permission == LocationPermission.denied) {
         permission = await requestPermission();
         if (permission == LocationPermission.denied) {
-          return LocationResult.error('Location permissions are denied. Please grant location permission to auto-detect your location.');
+          return LocationResult.error(
+            'Location permissions are denied. Please grant location permission to auto-detect your location.',
+          );
         }
       }
 
       if (permission == LocationPermission.deniedForever) {
-        return LocationResult.error('Location permissions are permanently denied. Please enable location permission in app settings.');
+        return LocationResult.error(
+          'Location permissions are permanently denied. Please enable location permission in app settings.',
+        );
       }
 
       // Get current position
@@ -55,29 +61,41 @@ class LocationService {
 
       return LocationResult.success(position);
     } catch (e) {
-      return LocationResult.error('Failed to get current location: ${e.toString()}');
+      return LocationResult.error(
+        'Failed to get current location: ${e.toString()}',
+      );
     }
   }
 
   /// Convert coordinates to address using reverse geocoding
-  Future<AddressResult> getAddressFromCoordinates(double latitude, double longitude) async {
+  Future<AddressResult> getAddressFromCoordinates(
+    double latitude,
+    double longitude,
+  ) async {
     try {
-      List<Placemark> placemarks = await placemarkFromCoordinates(latitude, longitude);
-      
+      List<Placemark> placemarks = await placemarkFromCoordinates(
+        latitude,
+        longitude,
+      );
+
       if (placemarks.isEmpty) {
-        return AddressResult.error('No address found for the current location.');
+        return AddressResult.error(
+          'No address found for the current location.',
+        );
       }
 
       final placemark = placemarks.first;
-      return AddressResult.success(LocationAddress(
-        state: placemark.administrativeArea ?? '',
-        district: placemark.subAdministrativeArea ?? '',
-        locality: placemark.locality ?? '',
-        subLocality: placemark.subLocality ?? '',
-        country: placemark.country ?? '',
-        postalCode: placemark.postalCode ?? '',
-        fullAddress: _formatAddress(placemark),
-      ));
+      return AddressResult.success(
+        LocationAddress(
+          state: placemark.administrativeArea ?? '',
+          district: placemark.subAdministrativeArea ?? '',
+          locality: placemark.locality ?? '',
+          subLocality: placemark.subLocality ?? '',
+          country: placemark.country ?? '',
+          postalCode: placemark.postalCode ?? '',
+          fullAddress: _formatAddress(placemark),
+        ),
+      );
     } catch (e) {
       return AddressResult.error('Failed to get address: ${e.toString()}');
     }
@@ -86,14 +104,14 @@ class LocationService {
   /// Get current location with address
   Future<CurrentLocationResult> getCurrentLocationWithAddress() async {
     final positionResult = await getCurrentPosition();
-    
+
     if (positionResult.isError) {
       return CurrentLocationResult.error(positionResult.error!);
     }
 
     final position = positionResult.position!;
     final addressResult = await getAddressFromCoordinates(
-      position.latitude, 
+      position.latitude,
       position.longitude,
     );
 
@@ -110,7 +128,7 @@ class LocationService {
   /// Format placemark into readable address
   String _formatAddress(Placemark placemark) {
     final parts = <String>[];
-    
+
     if (placemark.subLocality?.isNotEmpty == true) {
       parts.add(placemark.subLocality!);
     }
@@ -170,13 +188,14 @@ class CurrentLocationResult {
   final String? error;
   final bool isSuccess;
 
-  CurrentLocationResult.success({
-    required this.position,
-    required this.address,
-  }) : error = null, isSuccess = true;
+  CurrentLocationResult.success({required this.position, required this.address})
+    : error = null,
+      isSuccess = true;
 
-  CurrentLocationResult.error(this.error) 
-    : position = null, address = null, isSuccess = false;
+  CurrentLocationResult.error(this.error)
+    : position = null,
+      address = null,
+      isSuccess = false;
 
   bool get isError => !isSuccess;
 }

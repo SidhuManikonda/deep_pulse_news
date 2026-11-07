@@ -27,7 +27,8 @@ class LocationSelectionScreen extends ConsumerWidget {
               // Icon
               Center(
                 child: Container(
-                  width: 100, height: 100,
+                  width: 100,
+                  height: 100,
                   decoration: BoxDecoration(
                     color: theme.appPrimary.withValues(alpha: 0.08),
                     shape: BoxShape.circle,
@@ -84,7 +85,9 @@ class LocationSelectionScreen extends ConsumerWidget {
                 width: double.infinity,
                 onPressed: () => Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const StateSelectionScreen()),
+                  MaterialPageRoute(
+                    builder: (_) => const StateSelectionScreen(),
+                  ),
                 ),
               ),
 
@@ -101,7 +104,8 @@ class LocationSelectionScreen extends ConsumerWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: 52, height: 52,
+          width: 52,
+          height: 52,
           decoration: const BoxDecoration(
             color: Color(0xFFF2F2F7),
             shape: BoxShape.circle,
@@ -125,7 +129,8 @@ class LocationSelectionScreen extends ConsumerWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 22),
       child: Container(
-        width: 30, height: 2,
+        width: 30,
+        height: 2,
         decoration: BoxDecoration(
           color: const Color(0xFFE5E5EA),
           borderRadius: BorderRadius.circular(1),
